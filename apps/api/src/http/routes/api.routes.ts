@@ -239,6 +239,8 @@ export function buildApiRouter(container: AppContainer): Router {
     ['cancel', 'CANCELLED'],
     ['check-in', 'CHECKED_IN'],
     ['no-show', 'NO_SHOW'],
+    ['start', 'IN_PROGRESS'],
+    ['complete', 'COMPLETED'],
   ] as const satisfies readonly (readonly [string, AppointmentStatus])[]) {
     api.post(
       `/appointments/:id/${path}`,
@@ -275,6 +277,39 @@ export function buildApiRouter(container: AppContainer): Router {
       },
     );
   }
+
+  api.get('/patients/:id', async (req, res, next) => {
+    try {
+      const id = routeParam(req.params.id);
+      if (id === undefined) {
+        res.status(400).end();
+        return;
+      }
+      const found = await container.repos.patients.getById(clinicId, id);
+      if (found === null) {
+        res
+          .status(404)
+          .type('application/problem+json')
+          .json({
+            type: 'https://scanflow.local/problems/not-found',
+            title: 'Not found',
+            status: 404,
+            detail: `patient '${id}' was not found. Check the id and try again.`,
+          });
+        return;
+      }
+      res.json({
+        id: found.id,
+        mrn: found.mrn,
+        fullName: found.fullName,
+        dateOfBirth: found.dateOfBirth,
+        phone: found.phone,
+        createdAt: found.createdAt.toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   api.get(
     '/patients',

@@ -1,6 +1,8 @@
 import type { CSSProperties, ReactElement } from 'react';
 
 import type { GhostSegment } from '../booking/ghost-preview';
+import { SegmentKebab } from '../management/SegmentKebab';
+import type { KebabAction } from '../management/status-actions';
 
 import type { GridLane, GridSegment } from './build-schedule-view';
 import { useScheduleInteraction } from './use-schedule-interaction';
@@ -12,6 +14,12 @@ export interface ScheduleGridProps {
   totalSlots: number;
   /** Translucent overlay for a hovered suggestion — never interactive. */
   ghostSegments?: readonly GhostSegment[];
+  onSegmentActivate?: (appointmentId: string) => void;
+  kebabOpenSegmentId?: string | null;
+  kebabActions?: readonly KebabAction[];
+  onKebabToggle?: (segmentId: string) => void;
+  onKebabAction?: (action: KebabAction, appointmentId: string) => void;
+  onKebabClose?: () => void;
 }
 
 export function ScheduleGrid({
@@ -20,6 +28,12 @@ export function ScheduleGrid({
   timeLabels,
   totalSlots,
   ghostSegments = [],
+  onSegmentActivate,
+  kebabOpenSegmentId = null,
+  kebabActions = [],
+  onKebabToggle,
+  onKebabAction,
+  onKebabClose,
 }: ScheduleGridProps): ReactElement {
   const interaction = useScheduleInteraction(segments);
 
@@ -80,12 +94,11 @@ export function ScheduleGrid({
         const resourceType =
           lanes[laneIndex]?.resourceType ??
           (segment.kind === 'DELAY' ? undefined : undefined);
+        const kebabOpen = kebabOpenSegmentId === segment.id;
 
         return (
-          <button
+          <div
             key={segment.id}
-            type="button"
-            data-segment-id={segment.id}
             className={[
               'schedule-segment',
               segment.kind === 'DELAY'
@@ -104,15 +117,57 @@ export function ScheduleGrid({
               interaction.onSegmentEnter(segment.id);
             }}
             onMouseLeave={interaction.onSegmentLeave}
-            onFocus={() => {
-              interaction.onSegmentFocus(segment.id);
-            }}
-            onKeyDown={(event) => {
-              interaction.onSegmentKeyDown(event, segment.id);
-            }}
           >
-            <span className="schedule-segment__label">{segment.label}</span>
-          </button>
+            <button
+              type="button"
+              data-segment-id={segment.id}
+              className="schedule-segment__hit"
+              onFocus={() => {
+                interaction.onSegmentFocus(segment.id);
+              }}
+              onClick={() => {
+                onSegmentActivate?.(segment.appointmentId);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onSegmentActivate?.(segment.appointmentId);
+                  return;
+                }
+                interaction.onSegmentKeyDown(event, segment.id);
+              }}
+            >
+              <span className="schedule-segment__label">{segment.label}</span>
+            </button>
+            {onKebabToggle !== undefined ? (
+              <button
+                type="button"
+                className="schedule-segment__kebab-btn"
+                aria-label="Appointment actions"
+                aria-haspopup="menu"
+                aria-expanded={kebabOpen}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onKebabToggle(segment.id);
+                }}
+              >
+                ⋯
+              </button>
+            ) : null}
+            {kebabOpen ? (
+              <SegmentKebab
+                open
+                actions={kebabActions}
+                anchorLabel={segment.label}
+                onClose={() => {
+                  onKebabClose?.();
+                }}
+                onAction={(action) => {
+                  onKebabAction?.(action, segment.appointmentId);
+                }}
+              />
+            ) : null}
+          </div>
         );
       })}
 

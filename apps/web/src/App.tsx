@@ -1,8 +1,27 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { AppointmentDetail, PatientDto } from '@scanflow/contracts';
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 
+import {
+  fetchAppointment,
+  fetchPatient,
+  postAppointmentStatus,
+} from './api/client';
 import { BookingWizard } from './booking/BookingWizard';
 import type { GhostSegment } from './booking/ghost-preview';
+import { AppointmentDrawer } from './management/AppointmentDrawer';
+import { CommandPalette } from './management/CommandPalette';
+import { printAppointmentSummary } from './management/print-summary';
+import { ReschedulePanel } from './management/ReschedulePanel';
+import {
+  kebabActionsFor,
+  statusActionPath,
+  type KebabAction,
+} from './management/status-actions';
 import { ScheduleGrid } from './schedule/ScheduleGrid';
 import { formatUpdatedAgo, useSchedule } from './schedule/use-schedule';
 
@@ -29,13 +48,26 @@ export function App(): ReactElement {
 }
 
 function AppShell(): ReactElement {
+  const client = useQueryClient();
   const [date, setDate] = useState(defaultClinicDate);
   const { view, schedule, isLoading, isError, error, dataUpdatedAt } =
     useSchedule(date);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardSession, setWizardSession] = useState(0);
+  const [paletteSession, setPaletteSession] = useState<number | null>(null);
   const [ghostSegments, setGhostSegments] = useState<GhostSegment[]>([]);
+  const [drawerAppointmentId, setDrawerAppointmentId] = useState<string | null>(
+    null,
+  );
+  const [kebabSegmentId, setKebabSegmentId] = useState<string | null>(null);
+  const [reschedule, setReschedule] = useState<{
+    detail: AppointmentDetail;
+    patient: PatientDto;
+  } | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const timeZone = schedule?.timezone ?? 'UTC';
 
   const clearGhosts = useCallback(() => {
     setGhostSegments([]);
@@ -45,9 +77,13 @@ function AppShell(): ReactElement {
     setGhostSegments(ghosts);
   }, []);
 
-  const openWizardStable = useCallback(() => {
+  const openWizard = useCallback(() => {
     setWizardSession((session) => session + 1);
     setWizardOpen(true);
+  }, []);
+
+  const openPalette = useCallback(() => {
+    setPaletteSession((session) => (session ?? 0) + 1);
   }, []);
 
   useEffect(() => {
@@ -61,6 +97,14 @@ function AppShell(): ReactElement {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
+      if (
+        (event.key === 'k' || event.key === 'K') &&
+        (event.metaKey || event.ctrlKey)
+      ) {
+        event.preventDefault();
+        openPalette();
+        return;
+      }
       if (event.key !== 'n' && event.key !== 'N') return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target;
@@ -75,15 +119,74 @@ function AppShell(): ReactElement {
           return;
         }
       }
-      if (wizardOpen) return;
+      if (wizardOpen || paletteSession !== null) return;
       event.preventDefault();
-      openWizardStable();
+      openWizard();
     }
     window.addEventListener('keydown', onKeyDown);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [wizardOpen, openWizardStable]);
+  }, [wizardOpen, paletteSession, openWizard, openPalette]);
+
+  const kebabSegment =
+    kebabSegmentId === null || view === undefined
+      ? undefined
+      : view.segments.find((segment) => segment.id === kebabSegmentId);
+  const kebabActions =
+    kebabSegment === undefined ? [] : kebabActionsFor(kebabSegment.status);
+
+  async function runKebabAction(
+    action: KebabAction,
+    appointmentId: string,
+  ): Promise<void> {
+    setActionError(null);
+    setKebabSegmentId(null);
+
+    if (action.id === 'print' || action.id === 'reschedule') {
+      try {
+        const detail = await fetchAppointment(appointmentId);
+        const patient = await fetchPatient(detail.patientId);
+        if (action.id === 'print') {
+          printAppointmentSummary(detail, patient, timeZone);
+        } else {
+          setDrawerAppointmentId(null);
+          setReschedule({ detail, patient });
+        }
+      } catch (err) {
+        setActionError(
+          err instanceof Error
+            ? err.message
+            : 'Could not load this appointment.',
+        );
+      }
+      return;
+    }
+
+    // Cancel asks for a reason, so it opens the drawer rather than firing here.
+    if (action.id === 'cancel') {
+      setDrawerAppointmentId(appointmentId);
+      return;
+    }
+
+    if (action.toStatus === undefined) return;
+    const path = statusActionPath(action.toStatus);
+    if (path === null) return;
+    try {
+      await postAppointmentStatus(appointmentId, path);
+      await client.invalidateQueries({ queryKey: ['schedule'] });
+      await client.invalidateQueries({
+        queryKey: ['appointment', appointmentId],
+      });
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : 'That action was rejected.',
+      );
+    }
+  }
+
+  const sidePanelOpen =
+    wizardOpen || reschedule !== null || drawerAppointmentId !== null;
 
   return (
     <div className="app">
@@ -99,18 +202,24 @@ function AppShell(): ReactElement {
             }}
           />
         </label>
-        <button
-          type="button"
-          className="btn btn--primary"
-          onClick={openWizardStable}
-        >
+        <button type="button" className="btn btn--ghost" onClick={openPalette}>
+          Search
+        </button>
+        <button type="button" className="btn btn--primary" onClick={openWizard}>
           Book
         </button>
         <p className="app__live" aria-live="polite">
           {formatUpdatedAgo(dataUpdatedAt, nowMs)}
         </p>
       </header>
+
       <main className="app__main">
+        {actionError !== null ? (
+          <p className="app__error" role="alert">
+            {actionError}
+          </p>
+        ) : null}
+
         {isLoading && view === undefined ? (
           <ScheduleSkeleton />
         ) : isError ? (
@@ -120,12 +229,12 @@ function AppShell(): ReactElement {
             API is running, then pick the date again.
           </p>
         ) : view === undefined ? (
-          <p className="app__empty">No schedule data for this date.</p>
+          <p className="app__empty">No schedule for this date.</p>
         ) : (
           <div
             className={[
               'app__workspace',
-              wizardOpen ? 'app__workspace--booking' : '',
+              sidePanelOpen ? 'app__workspace--booking' : '',
             ]
               .filter(Boolean)
               .join(' ')}
@@ -142,8 +251,26 @@ function AppShell(): ReactElement {
                 timeLabels={view.timeLabels}
                 totalSlots={view.totalSlots}
                 ghostSegments={ghostSegments}
+                onSegmentActivate={(appointmentId) => {
+                  setReschedule(null);
+                  setDrawerAppointmentId(appointmentId);
+                }}
+                kebabOpenSegmentId={kebabSegmentId}
+                kebabActions={kebabActions}
+                onKebabToggle={(segmentId) => {
+                  setKebabSegmentId((current) =>
+                    current === segmentId ? null : segmentId,
+                  );
+                }}
+                onKebabClose={() => {
+                  setKebabSegmentId(null);
+                }}
+                onKebabAction={(action, appointmentId) => {
+                  void runKebabAction(action, appointmentId);
+                }}
               />
             </div>
+
             <BookingWizard
               key={wizardSession}
               open={wizardOpen}
@@ -156,9 +283,60 @@ function AppShell(): ReactElement {
               lanes={view.lanes}
               onGhostChange={onGhostChange}
             />
+
+            <AppointmentDrawer
+              appointmentId={drawerAppointmentId}
+              timeZone={timeZone}
+              onClose={() => {
+                setDrawerAppointmentId(null);
+              }}
+              onReschedule={(detail, patient) => {
+                setDrawerAppointmentId(null);
+                setReschedule({ detail, patient });
+              }}
+              onPrint={(detail, patient) => {
+                printAppointmentSummary(detail, patient, timeZone);
+              }}
+            />
+
+            {reschedule !== null && schedule !== undefined ? (
+              <ReschedulePanel
+                appointment={reschedule.detail}
+                patient={reschedule.patient}
+                date={date}
+                timeZone={schedule.timezone}
+                dayStart={schedule.dayStart}
+                dayEnd={schedule.dayEnd}
+                slotMinutes={schedule.slotMinutes}
+                lanes={view.lanes}
+                onGhostChange={onGhostChange}
+                onClose={() => {
+                  clearGhosts();
+                  setReschedule(null);
+                }}
+                onDone={() => {
+                  clearGhosts();
+                  setReschedule(null);
+                }}
+              />
+            ) : null}
           </div>
         )}
       </main>
+
+      {paletteSession !== null ? (
+        <CommandPalette
+          key={paletteSession}
+          onClose={() => {
+            setPaletteSession(null);
+          }}
+          onSelectAppointment={(appointmentId) => {
+            setReschedule(null);
+            setDrawerAppointmentId(appointmentId);
+          }}
+          onSelectPatient={openWizard}
+        />
+      ) : null}
     </div>
   );
 }

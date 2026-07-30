@@ -175,6 +175,46 @@ Spec 7.1.1 shows Save as preset for ADMIN only. There is no auth yet (see D21),
 so the action is omitted rather than exposing template writes to every user or
 stubbing a fake role gate.
 
+### D27 — `start` and `complete` status endpoints were added in M5
+
+Spec 5.3 lists only `cancel`, `check-in`, and `no-show`, but M5-01 requires every
+legal transition to be reachable from the UI, and the table in spec 2.11 includes
+`CHECKED_IN → IN_PROGRESS → COMPLETED`. M5 adds
+`POST /appointments/{id}/start` and `POST /appointments/{id}/complete` using the
+same use case and the same transition table, rather than inventing a generic
+`PATCH status` endpoint that would bypass the named-action audit entries.
+
+### D28 — `GET /patients/{id}` was added for the drawer
+
+Spec 5.3 lists only `GET /patients?q=`. The appointment drawer needs the patient
+behind one appointment; filtering a search page client-side would be wrong as the
+patient list grows. The endpoint is a plain by-id read, scoped to the clinic.
+
+### D29 — The transition table moved to `packages/contracts`
+
+The kebab must omit illegal actions rather than disable them, which means the web
+app needs the same table the API enforces. `APPOINTMENT_STATUS_TRANSITIONS` now
+lives in contracts and `apps/api`'s `appointment.domain.ts` asserts against it, so
+there is still exactly one table.
+
+### D30 — Patient search now includes phone
+
+Spec 8 says the command palette searches name, MRN, and phone, but the repository
+only matched name and MRN. Phone was added to the same `ILIKE` predicate.
+
+### D31 — The kebab's fifth item is always Print summary
+
+Spec 8 caps quick actions at five. With reschedule, cancel, no-show, and print
+plus one or two legal transitions, the list can exceed five for `SCHEDULED`. The
+kebab keeps the first five in clinical order and the drawer lists every remaining
+legal transition, so nothing becomes unreachable.
+
+### D32 — Cmd+K patient results open the booking wizard
+
+There is no patient profile screen in scope. Selecting an appointment opens the
+drawer; selecting a patient opens the booking wizard, which is what a
+receptionist searching a patient by phone is almost always about to do.
+
 ### D9 — Local verification of the database constraints was deferred to CI
 
 Docker is not installed on the development machine used for M0 (no Docker

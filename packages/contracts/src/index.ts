@@ -24,6 +24,12 @@ export {
 } from './chain.js';
 
 export {
+  APPOINTMENT_STATUS_TRANSITIONS,
+  allowedTransitions,
+  canTransition,
+} from './status-transitions.js';
+
+export {
   appointmentDetailSchema,
   appointmentTemplateDetailSchema,
   appointmentTemplateSummarySchema,
@@ -71,6 +77,7 @@ export {
   type ScheduleSegment,
   type Instant,
   type ListAppointmentsQuery,
+  type ListAppointmentsResponse,
   type ListPatientsQuery,
   type PatientDto,
   type PlacementDto,
