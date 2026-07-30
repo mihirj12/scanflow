@@ -161,6 +161,20 @@ that `.env.example` documents.
 must be clinic-local, so M3 added `timezone` (IANA) to `GetScheduleResponse`
 rather than hardcoding Asia/Kolkata in the web app.
 
+### D25 — Chain reorder uses ↑/↓ steppers, not HTML5 drag-and-drop
+
+Spec 7.1.1 asks for a drag handle. Keyboard-operable reorder is mandatory
+(M4-12), so M4 ships explicit Move up / Move down controls that renumber `seq`
+and repair `sameResourceAsSeq` through the same normaliser a drag end would
+call. A pointer drag handle can be layered on later without changing the data
+path.
+
+### D26 — "Save as preset" deferred until M6 auth
+
+Spec 7.1.1 shows Save as preset for ADMIN only. There is no auth yet (see D21),
+so the action is omitted rather than exposing template writes to every user or
+stubbing a fake role gate.
+
 ### D9 — Local verification of the database constraints was deferred to CI
 
 Docker is not installed on the development machine used for M0 (no Docker
