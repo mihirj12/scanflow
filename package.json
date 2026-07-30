@@ -18,6 +18,7 @@
     "dev": "turbo run dev",
     "db:migrate": "pnpm --filter @scanflow/api db:migrate",
     "db:verify": "pnpm --filter @scanflow/api db:verify",
+    "db:seed": "pnpm --filter @scanflow/api db:seed",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky"

@@ -276,6 +276,29 @@ export const auditLog = pgTable('audit_log', {
   at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Replay store for Idempotency-Key. See migration 0001. The request hash is
+ * what distinguishes a legitimate retry from a key reused with a different body.
+ */
+export const idempotencyRecord = pgTable(
+  'idempotency_record',
+  {
+    clinicId: uuid('clinic_id')
+      .notNull()
+      .references(() => clinic.id),
+    key: text('key').notNull(),
+    requestHash: text('request_hash').notNull(),
+    method: text('method').notNull(),
+    path: text('path').notNull(),
+    statusCode: smallint('status_code').notNull(),
+    response: jsonb('response').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.clinicId, t.key] })],
+);
+
 export const schema = {
   clinic,
   patient,
@@ -290,4 +313,5 @@ export const schema = {
   appointmentSegment,
   scheduleVersion,
   auditLog,
+  idempotencyRecord,
 };

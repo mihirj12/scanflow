@@ -6,5 +6,9 @@ packages:
 # binaries that genuinely need a postinstall to unpack a platform build:
 # esbuild backs Vite, unrs-resolver backs eslint-plugin-import-x.
 allowBuilds:
+  # Testcontainers needs these native builds for the Docker SSH transport.
+  cpu-features: true
   esbuild: true
+  protobufjs: true
+  ssh2: true
   unrs-resolver: true

@@ -25,17 +25,17 @@ application level.
 
 ## Status
 
-Phases **M0 — Foundations** and **M1 — Scheduling engine** are complete. The engine
-in `packages/scheduling-core` places chains of steps against a day's availability
-and returns ranked candidates; it has no dependencies, no `async`, and no I/O.
-There is no API yet — that is M2.
+Phases **M0 — Foundations**, **M1 — Scheduling engine**, and **M2 — API** are
+complete. The engine proposes ranked placements; the Express API books them
+transactionally against Postgres exclusion constraints, with Testcontainers
+covering the concurrent race.
 
 | Phase  | Deliverable                                              | State       |
 | ------ | -------------------------------------------------------- | ----------- |
 | M0     | Monorepo, tooling, CI, Compose, schema, migrations, ADRs | Complete    |
 | M1     | Scheduling engine + property tests                       | Complete    |
-| **M2** | **Express API, repositories, integration tests**         | Next        |
-| M3     | Read-only schedule grid                                  | Not started |
+| M2     | Express API, repositories, integration tests             | Complete    |
+| **M3** | **Read-only schedule grid**                              | Next        |
 | M4     | Suggestions, booking wizard, conflict recovery           | Not started |
 | M5     | Management UI: drawer, kebab menu, command palette       | Not started |
 | M6     | Auth, RBAC, audit, SSE, seed polish                      | Not started |
@@ -52,11 +52,14 @@ pnpm db:migrate           # idempotent — a second run is a no-op
 pnpm db:verify            # asserts the exclusion constraints actually hold
 ```
 
-Then `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm bench`.
-`pnpm dev` starts the web shell; there is nothing to serve from the API until M2.
+Then `pnpm db:seed`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`,
+`pnpm bench`. `pnpm --filter @scanflow/api dev` serves the API; `pnpm dev` starts
+the web shell (schedule grid arrives in M3).
 
 Nothing in `packages/scheduling-core` needs Docker — it is pure, so `pnpm test`
-and `pnpm bench` run against no services at all.
+and `pnpm bench` run against no services at all. API integration tests need
+Docker (`pnpm test:integration`); they run in CI when Docker Desktop is absent
+locally.
 
 ## Architecture in ten lines
 

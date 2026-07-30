@@ -94,7 +94,6 @@ jobs:
     name: test:integration
     runs-on: ubuntu-latest
     # Testcontainers needs a Docker daemon; GitHub-hosted Ubuntu runners have one.
-    # No package declares this script until M2, so today it is a successful no-op.
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
