@@ -72,6 +72,26 @@ Return at most `maxCandidates`, deduplicated by (startSlot, resource assignment)
   silently accepted. An unschedulable-but-valid request returns an empty array,
   never an exception.
 
+## How the implementation is shaped
+
+`suggest-placements.ts` is one exported function with closures over the search
+state. Things worth knowing before changing it:
+
+- The chain is precompiled into a linked list of `StepPlan`, each carrying its
+  eligible resources (sorted by id) and `minTail` — the fewest slots from that
+  step's start to the end of the chain. `minTail` is the bound: `start + minTail`
+  is the earliest the chain can possibly finish, so a branch exceeding the worst
+  kept span cannot be rescued downstream.
+- The bound prunes on `>`, never `>=`. Candidates that tie on span must survive to
+  be judged on start, load, and ids, or the ranking's tie-breaks never apply.
+- The outer loop stops early once `maxCandidates` candidates all sit at the
+  theoretical minimum span, because a later start can only tie and then lose the
+  startSlot tie-break.
+- `overlay` is mutated and restored around each recursive call rather than copied.
+  If you add state to the search, back it out on the same path.
+- A `DELAY` placement carries the `seq` of the step it precedes, and shares that
+  seq with the step's own `SERVICE` placement. `kind` tells them apart.
+
 ## Adding a constraint
 
 1. Add the property test first, and watch it fail.
@@ -79,3 +99,16 @@ Return at most `maxCandidates`, deduplicated by (startSlot, resource assignment)
 3. Implement inside the DFS.
 4. Confirm all nine existing properties still pass.
 5. Re-run the benchmark; p95 must stay under 50 ms.
+
+## Before trusting a green property run
+
+A property phrased "for every candidate returned" passes trivially on an empty
+result, so a green suite is not by itself evidence. Two guards exist and should be
+kept working:
+
+- `the generator` test measures the sampled requests and fails if they stop being
+  mostly schedulable and structurally varied.
+- The suite has been verified to fail when the engine is deliberately broken:
+  removing the overlay fails property 1, letting a mandatory gap compress fails
+  property 3, ignoring `sameResourceAsSeq` fails property 5. If you materially
+  change the engine, re-do that check rather than assuming it still holds.

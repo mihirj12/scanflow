@@ -193,3 +193,107 @@ data is synthetic and no PHI is in the repository or its history. That was audit
 before the switch — the only tracked env file is `.env.example`, and its credentials
 are the local container's `scanflow:scanflow`. Were this repository ever to hold real
 data, private plus Advanced Security would be the only acceptable configuration.
+
+### D14 — A `DELAY` placement carries the `seq` of the step it precedes
+
+Spec 4.1 gives `Placement` a single `seq` field and does not say what a `DELAY`
+should put in it. A delay is not an independent thing: it exists because the
+following step declares a `[minGapSlots, maxGapSlots]` window, and it is that
+step's gap. So it takes that step's `seq`, and a delay and its step are told apart
+by `kind`.
+
+This matches how the segments are stored: `appointment_segment` carries both
+`seq` and `kind` and deliberately has no unique constraint on
+`(appointment_id, seq)`, so the pair persists without renumbering in M2.
+
+The alternative — numbering every segment 1..n across services and delays —
+would make `Placement.seq` mean something different from `EngineStep.seq` and
+break the direct lookup that `sameResourceAsSeq` needs.
+
+### D15 — The engine ignores the gap fields on the first step rather than rejecting them
+
+Spec 4.3's pseudocode forces `gapLo = gapHi = 0` when `i == 0`, while validation
+rule 2.9.3 says step 1 must have `min_gap_min = max_gap_min = 0`. Both are
+satisfied by treating the first step's window as zero regardless of what it
+contains, which is what the pseudocode does, and the TSDoc on `EngineStep` says
+so explicitly.
+
+Rejecting a non-zero value here was considered and not done: 2.9 places that rule
+in `packages/contracts`, where the wizard and the API both run it, and there is no
+sensible answer to "how long to wait before the first step" for the engine to
+enforce independently. A delay is measured from the previous step's end, and the
+first step has no previous step.
+
+### D16 — The engine re-validates `sameResourceAsSeq`, which spec 2.9 puts in contracts
+
+Rule 2.9.7 — a `same_resource_as_seq` must reference an earlier step of the same
+resource type — belongs to the Zod refinement in `packages/contracts`. The engine
+checks it too, along with `seq` contiguity, because it resolves the reference by
+looking up an already-assigned step and a dangling or forward reference would
+otherwise be undefined behaviour inside a pure function.
+
+This is defence in depth rather than duplication of intent: the contracts
+refinement gives the receptionist live feedback in the wizard, and this makes
+`suggestPlacements` total for every input it accepts.
+
+### D17 — The bound is an admissible tail bound, and prunes on `>` not `>=`
+
+Spec 4.3 suggests `if (end - startSlot) >= worstKeptSpan and best.isFull(): break`.
+Two changes:
+
+The bound compares `start + minTail` rather than `end`, where `minTail` is the
+fewest slots the rest of the chain can occupy — every remaining duration plus
+every remaining _minimum_ gap. This is admissible (no completion can finish
+sooner) and strictly stronger than bounding on the current step's end alone, so it
+prunes earlier while never discarding a better answer.
+
+The comparison is strict. With `>=`, a candidate that ties on `spanSlots` would be
+pruned before its secondary tie-breaks — start, then resource load, then resource
+ids — were ever considered, so the returned set could omit the candidate that the
+ranking in 4.4 says should win a tie. Strict `>` explores ties and lets the
+comparator decide, which is what makes "best five by that ranking" true rather
+than approximately true.
+
+### D18 — The benchmark reports two cases, not one
+
+Spec 4.7 names one worst case: 6 steps, 4 resources per type, wide gap windows,
+50% occupancy. Measured, it is not the worst case — with four resources per type
+the engine almost always finds a zero-slack layout at the first few starts, and
+the bound then prunes the entire remaining search. p95 is 1.54 ms.
+
+A second case was added where the last step requires a modality only one 95%-booked
+resource provides. Steps 1 to 5 explore freely and the search fails at full depth
+with almost no candidates to tighten the bound against, which is the shape that
+would actually expose a wrong bound. It is roughly twice as slow, at 3.25 ms.
+
+Both are reported and both are asserted against the 50 ms budget. Reporting only
+the spec's case would have overstated the engine by flattering it with the easier
+input.
+
+### D19 — The load tie-break counts each resource once
+
+Ranking criterion 4.4.3 is "total load of the assigned resources ascending". Where
+one resource serves several steps of a chain — the same physician consulting and
+reviewing — its load is counted once, not once per step. Summing per step would
+make reusing a resource look expensive, which is the opposite of the intent: the
+criterion exists to spread work across a pool, and reuse is what the same-resource
+constraint often requires.
+
+### D20 — The property suite is guarded by a test that measures the generator
+
+Every one of the nine invariants is phrased "for every candidate returned", so all
+nine pass trivially when `suggestPlacements` returns an empty array. A generator
+that drifted toward unschedulable days would leave the suite green and worthless.
+
+A tenth test samples 400 requests from a fixed seed and asserts that most are
+schedulable and that the structural features the engine is most likely to get
+wrong actually occur — currently 76% schedulable at 2.1 candidates each, 78% of
+chains carrying a same-resource pin, 97% with non-zero setup or teardown, 97% with
+more than one resource of some type. The thresholds are deliberately far below the
+measured values: this catches a degenerate generator, not ordinary variation.
+
+The suite was also checked by breaking the engine three ways on purpose — dropping
+the overlay mask, allowing a mandatory delay to be compressed, and ignoring
+`sameResourceAsSeq` — and confirming that properties 1, 3 and 5 respectively
+failed, each within milliseconds. Properties that have never been seen to fail are
+not yet evidence of anything.
