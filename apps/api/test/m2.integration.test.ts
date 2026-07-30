@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { sql } from 'drizzle-orm';
 import pino from 'pino';
+import postgres from 'postgres';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 
@@ -9,6 +10,14 @@ import { SEED_PATIENT_IDENTIFIERS } from '../scripts/seed.js';
 import { createApp } from '../src/http/app.js';
 import { formatTstzrange } from '../src/infra/db/tstzrange.js';
 import { agent, appContainer, FIXTURE_DATE } from './setup.js';
+
+function sqlStateOf(error: unknown): string | undefined {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const { code } = error;
+    if (typeof code === 'string') return code;
+  }
+  return undefined;
+}
 
 async function patientId(): Promise<string> {
   const patients = await agent.get('/api/v1/patients').expect(200);
@@ -259,58 +268,51 @@ describe('M2 API integration', () => {
     const start = new Date('2026-08-07T02:30:00.000Z'); // 08:00 IST
     const end = new Date('2026-08-07T03:00:00.000Z');
     const during = formatTstzrange(start, end);
+    const pid = await patientId();
+    const clinicId = appContainer.config.CLINIC_ID;
 
-    // Minimal appointment scaffold for the FK.
-    const patients = await agent.get('/api/v1/patients').expect(200);
-    const pid = (patients.body as { items: { id: string }[] }).items[0]?.id;
-    if (pid === undefined) throw new Error('patient missing');
-
-    const inserted = await appContainer.db.execute(sql`
-      INSERT INTO appointment (clinic_id, patient_id, on_date, status)
-      VALUES (${appContainer.config.CLINIC_ID}::uuid, ${pid}::uuid, '2026-08-07', 'SCHEDULED')
-      RETURNING id
-    `);
-    const appointmentId = (inserted[0] as { id: string } | undefined)?.id;
-    if (appointmentId === undefined)
-      throw new Error('appointment insert failed');
-
-    await appContainer.db.execute(sql`
-      INSERT INTO appointment_segment (
-        appointment_id, clinic_id, patient_id, seq, kind,
-        resource_id, during, resource_during, status
-      ) VALUES (
-        ${appointmentId}::uuid,
-        ${appContainer.config.CLINIC_ID}::uuid,
-        ${pid}::uuid,
-        1, 'SERVICE',
-        ${doctor.id}::uuid,
-        ${during}::tstzrange,
-        ${during}::tstzrange,
-        'ACTIVE'
-      )
-    `);
-
-    let code: string | undefined;
+    // Raw postgres.js — same path as verify-schema; Drizzle wraps SQLSTATE.
+    const raw = postgres(process.env['DATABASE_URL'] ?? '', { max: 1 });
     try {
-      await appContainer.db.execute(sql`
+      const inserted = await raw<[{ id: string }]>`
+        INSERT INTO appointment (clinic_id, patient_id, on_date, status)
+        VALUES (${clinicId}::uuid, ${pid}::uuid, '2026-08-07', 'SCHEDULED')
+        RETURNING id
+      `;
+      const appointmentId = inserted[0]?.id;
+      if (appointmentId === undefined)
+        throw new Error('appointment insert failed');
+
+      await raw`
         INSERT INTO appointment_segment (
           appointment_id, clinic_id, patient_id, seq, kind,
           resource_id, during, resource_during, status
         ) VALUES (
-          ${appointmentId}::uuid,
-          ${appContainer.config.CLINIC_ID}::uuid,
-          ${pid}::uuid,
-          2, 'SERVICE',
-          ${doctor.id}::uuid,
-          ${during}::tstzrange,
-          ${during}::tstzrange,
-          'ACTIVE'
+          ${appointmentId}::uuid, ${clinicId}::uuid, ${pid}::uuid,
+          1, 'SERVICE', ${doctor.id}::uuid,
+          ${during}::tstzrange, ${during}::tstzrange, 'ACTIVE'
         )
-      `);
-    } catch (error) {
-      code = (error as { code?: string }).code;
+      `;
+
+      let code: string | undefined;
+      try {
+        await raw`
+          INSERT INTO appointment_segment (
+            appointment_id, clinic_id, patient_id, seq, kind,
+            resource_id, during, resource_during, status
+          ) VALUES (
+            ${appointmentId}::uuid, ${clinicId}::uuid, ${pid}::uuid,
+            2, 'SERVICE', ${doctor.id}::uuid,
+            ${during}::tstzrange, ${during}::tstzrange, 'ACTIVE'
+          )
+        `;
+      } catch (error) {
+        code = sqlStateOf(error);
+      }
+      expect(code).toBe('23P01');
+    } finally {
+      await raw.end({ timeout: 5 });
     }
-    expect(code).toBe('23P01');
   });
 
   it('direct SQL overlap on a patient fails with 23P01', async () => {
@@ -326,54 +328,50 @@ describe('M2 API integration', () => {
     const end = new Date('2026-08-10T03:00:00.000Z');
     const during = formatTstzrange(start, end);
     const pid = await patientId();
+    const clinicId = appContainer.config.CLINIC_ID;
 
-    const inserted = await appContainer.db.execute(sql`
-      INSERT INTO appointment (clinic_id, patient_id, on_date, status)
-      VALUES (${appContainer.config.CLINIC_ID}::uuid, ${pid}::uuid, '2026-08-10', 'SCHEDULED')
-      RETURNING id
-    `);
-    const appointmentId = (inserted[0] as { id: string } | undefined)?.id;
-    if (appointmentId === undefined)
-      throw new Error('appointment insert failed');
-
-    await appContainer.db.execute(sql`
-      INSERT INTO appointment_segment (
-        appointment_id, clinic_id, patient_id, seq, kind,
-        resource_id, during, resource_during, status
-      ) VALUES (
-        ${appointmentId}::uuid,
-        ${appContainer.config.CLINIC_ID}::uuid,
-        ${pid}::uuid,
-        1, 'SERVICE',
-        ${doctor.id}::uuid,
-        ${during}::tstzrange,
-        ${during}::tstzrange,
-        'ACTIVE'
-      )
-    `);
-
-    // Different resource, same patient interval — patient EXCLUDE must fire.
-    let code: string | undefined;
+    const raw = postgres(process.env['DATABASE_URL'] ?? '', { max: 1 });
     try {
-      await appContainer.db.execute(sql`
+      const inserted = await raw<[{ id: string }]>`
+        INSERT INTO appointment (clinic_id, patient_id, on_date, status)
+        VALUES (${clinicId}::uuid, ${pid}::uuid, '2026-08-10', 'SCHEDULED')
+        RETURNING id
+      `;
+      const appointmentId = inserted[0]?.id;
+      if (appointmentId === undefined)
+        throw new Error('appointment insert failed');
+
+      await raw`
         INSERT INTO appointment_segment (
           appointment_id, clinic_id, patient_id, seq, kind,
           resource_id, during, resource_during, status
         ) VALUES (
-          ${appointmentId}::uuid,
-          ${appContainer.config.CLINIC_ID}::uuid,
-          ${pid}::uuid,
-          2, 'SERVICE',
-          ${scan.id}::uuid,
-          ${during}::tstzrange,
-          ${during}::tstzrange,
-          'ACTIVE'
+          ${appointmentId}::uuid, ${clinicId}::uuid, ${pid}::uuid,
+          1, 'SERVICE', ${doctor.id}::uuid,
+          ${during}::tstzrange, ${during}::tstzrange, 'ACTIVE'
         )
-      `);
-    } catch (error) {
-      code = (error as { code?: string }).code;
+      `;
+
+      // Different resource, same patient interval — patient EXCLUDE must fire.
+      let code: string | undefined;
+      try {
+        await raw`
+          INSERT INTO appointment_segment (
+            appointment_id, clinic_id, patient_id, seq, kind,
+            resource_id, during, resource_during, status
+          ) VALUES (
+            ${appointmentId}::uuid, ${clinicId}::uuid, ${pid}::uuid,
+            2, 'SERVICE', ${scan.id}::uuid,
+            ${during}::tstzrange, ${during}::tstzrange, 'ACTIVE'
+          )
+        `;
+      } catch (error) {
+        code = sqlStateOf(error);
+      }
+      expect(code).toBe('23P01');
+    } finally {
+      await raw.end({ timeout: 5 });
     }
-    expect(code).toBe('23P01');
   });
 
   it('cancelling frees slots for a subsequent booking', async () => {

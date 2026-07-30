@@ -303,12 +303,14 @@ export function candidateToSegments(
 }
 
 export function isExclusionViolation(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const record = error as { code?: unknown; cause?: unknown };
-  if (record.code === '23P01') return true;
-  if (typeof record.cause === 'object' && record.cause !== null) {
-    const cause = record.cause as { code?: unknown };
-    return cause.code === '23P01';
+  // postgres.js puts SQLSTATE on the error; Drizzle may wrap it under `.cause`
+  // (and sometimes deeper). Walk a few layers rather than assume one shape.
+  let current: unknown = error;
+  for (let depth = 0; depth < 5; depth += 1) {
+    if (typeof current !== 'object' || current === null) return false;
+    const record = current as { code?: unknown; cause?: unknown };
+    if (record.code === '23P01') return true;
+    current = record.cause;
   }
   return false;
 }
