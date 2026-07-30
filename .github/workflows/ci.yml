@@ -110,7 +110,6 @@ jobs:
         env:
           # Ryuk can hang on some runners; the suite tears the container down itself.
           TESTCONTAINERS_RYUK_DISABLED: 'true'
-          DEBUG: 'testcontainers*'
 
   bench:
     name: bench

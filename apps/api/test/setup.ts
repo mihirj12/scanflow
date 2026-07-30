@@ -34,7 +34,8 @@ beforeAll(async () => {
 
   process.env['DATABASE_URL'] = url;
   process.env['CLINIC_ID'] = SEED_CLINIC_ID;
-  process.env['PORT'] = '0';
+  // Supertest never listens; any positive port satisfies config validation.
+  process.env['PORT'] = '3099';
   process.env['LOG_LEVEL'] = 'silent';
   process.env['NODE_ENV'] = 'test';
   process.env['CORS_ORIGIN'] = 'http://localhost:5173';
@@ -52,6 +53,10 @@ beforeAll(async () => {
 afterAll(async () => {
   // Close the pool so Vitest can exit; an open postgres.js client keeps the
   // event loop alive and hangs CI for the full job timeout.
-  await closeDb(appContainer.db);
-  await pgContainer.stop();
+  if (appContainer !== undefined) {
+    await closeDb(appContainer.db);
+  }
+  if (pgContainer !== undefined) {
+    await pgContainer.stop();
+  }
 }, 60_000);
