@@ -1,4 +1,8 @@
-import type { AppointmentDetail, PatientDto } from '@scanflow/contracts';
+import type {
+  AppointmentDetail,
+  CurrentUser,
+  PatientDto,
+} from '@scanflow/contracts';
 import {
   QueryClient,
   QueryClientProvider,
@@ -11,6 +15,8 @@ import {
   fetchPatient,
   postAppointmentStatus,
 } from './api/client';
+import { LoginPage } from './auth/LoginPage';
+import { useSession } from './auth/useSession';
 import { BookingWizard } from './booking/BookingWizard';
 import type { GhostSegment } from './booking/ghost-preview';
 import { AppointmentDrawer } from './management/AppointmentDrawer';
@@ -24,6 +30,7 @@ import {
 } from './management/status-actions';
 import { ScheduleGrid } from './schedule/ScheduleGrid';
 import { formatUpdatedAgo, useSchedule } from './schedule/use-schedule';
+import { useScheduleStream } from './schedule/use-schedule-stream';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,16 +49,46 @@ function defaultClinicDate(): string {
 export function App(): ReactElement {
   return (
     <QueryClientProvider client={queryClient}>
-      <AppShell />
+      <Gate />
     </QueryClientProvider>
   );
 }
 
-function AppShell(): ReactElement {
+/**
+ * Nothing renders the grid until a session exists. The API would reject the
+ * calls anyway; this keeps the UI from flashing an empty schedule first.
+ */
+function Gate(): ReactElement {
+  const session = useSession();
+
+  if (session.status === 'loading') {
+    return <p className="app__empty">Restoring your session…</p>;
+  }
+  if (session.status === 'signed-out') {
+    return <LoginPage onSignIn={session.signIn} />;
+  }
+  return (
+    <AppShell
+      user={session.user}
+      onSignOut={() => {
+        void session.signOut();
+      }}
+    />
+  );
+}
+
+function AppShell({
+  user,
+  onSignOut,
+}: {
+  user: CurrentUser;
+  onSignOut: () => void;
+}): ReactElement {
   const client = useQueryClient();
   const [date, setDate] = useState(defaultClinicDate);
   const { view, schedule, isLoading, isError, error, dataUpdatedAt } =
     useSchedule(date);
+  useScheduleStream(date, true);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardSession, setWizardSession] = useState(0);
@@ -211,6 +248,13 @@ function AppShell(): ReactElement {
         <p className="app__live" aria-live="polite">
           {formatUpdatedAgo(dataUpdatedAt, nowMs)}
         </p>
+        <p className="app__user">
+          {user.displayName}
+          <span className="app__role">{formatRole(user.role)}</span>
+        </p>
+        <button type="button" className="btn btn--ghost" onClick={onSignOut}>
+          Sign out
+        </button>
       </header>
 
       <main className="app__main">
@@ -339,6 +383,11 @@ function AppShell(): ReactElement {
       ) : null}
     </div>
   );
+}
+
+function formatRole(role: CurrentUser['role']): string {
+  const words = role.replaceAll('_', ' ').toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 function ScheduleSkeleton(): ReactElement {

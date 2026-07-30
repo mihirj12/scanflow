@@ -52,6 +52,15 @@ export const appointmentStatusSchema = z.enum(APPOINTMENT_STATUSES);
 export type AppointmentStatus = z.infer<typeof appointmentStatusSchema>;
 
 /**
+ * Who is using the system. Ordered least to most privileged, but the guard
+ * checks membership rather than rank — a clinician is not a superset of a
+ * receptionist, they simply do different jobs.
+ */
+export const USER_ROLES = ['RECEPTIONIST', 'CLINICIAN', 'ADMIN'] as const;
+export const userRoleSchema = z.enum(USER_ROLES);
+export type UserRole = z.infer<typeof userRoleSchema>;
+
+/**
  * Every enum keyed by its Postgres type name, in declaration order. Exported so
  * that an integration test can query `pg_enum` and assert the database labels
  * and these lists have not drifted apart.
@@ -61,4 +70,5 @@ export const ENUM_VALUES = {
   segment_kind: SEGMENT_KINDS,
   segment_status: SEGMENT_STATUSES,
   appointment_status: APPOINTMENT_STATUSES,
+  user_role: USER_ROLES,
 } as const;

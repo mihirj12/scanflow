@@ -20,7 +20,9 @@ export function useSchedule(date: string): {
   const query = useQuery({
     queryKey: ['schedule', date],
     queryFn: () => fetchSchedule(date),
-    refetchInterval: 15_000,
+    // Since M6 the SSE stream pushes changes within a second or two. Polling
+    // stays as the safety net for a dropped stream, hence 60s rather than 15s.
+    refetchInterval: 60_000,
   });
 
   const view =

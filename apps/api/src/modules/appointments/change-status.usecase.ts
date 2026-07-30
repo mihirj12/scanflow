@@ -31,6 +31,7 @@ import {
 import type {
   AppointmentRepository,
   AuditRepository,
+  ScheduleEventPublisher,
   UnitOfWork,
 } from './ports.js';
 
@@ -39,6 +40,7 @@ export interface ChangeStatusDeps {
   appointments: AppointmentRepository;
   scheduleVersions: ScheduleVersionRepository;
   audit: AuditRepository;
+  events: ScheduleEventPublisher;
 }
 
 export function createChangeStatusUseCase(deps: ChangeStatusDeps) {
@@ -49,7 +51,7 @@ export function createChangeStatusUseCase(deps: ChangeStatusDeps) {
     reason?: string;
     actorId: string | null;
   }) {
-    return deps.uow.run(async (tx) => {
+    const result = await deps.uow.run(async (tx) => {
       const loaded = await deps.appointments.getById(
         cmd.clinicId,
         cmd.appointmentId,
@@ -97,6 +99,14 @@ export function createChangeStatusUseCase(deps: ChangeStatusDeps) {
 
       return { appointment: updated, scheduleVersion: newVersion };
     });
+
+    await deps.events.publish({
+      clinicId: cmd.clinicId,
+      date: result.appointment.onDate,
+      version: result.scheduleVersion,
+    });
+
+    return result;
   };
 }
 
@@ -109,6 +119,7 @@ export function createRescheduleAppointmentUseCase(deps: {
   serviceTypes: ServiceTypeRepository;
   segments: SegmentRepository;
   audit: AuditRepository;
+  events: ScheduleEventPublisher;
 }) {
   return async function reschedule(cmd: {
     clinicId: string;
@@ -140,7 +151,7 @@ export function createRescheduleAppointmentUseCase(deps: {
     const day = clinicDayWindow(clinic.grid, loaded.appointment.onDate);
 
     try {
-      return await deps.uow.run(async (tx) => {
+      const result = await deps.uow.run(async (tx) => {
         const version = await deps.scheduleVersions.selectForUpdate(
           tx,
           cmd.clinicId,
@@ -254,6 +265,14 @@ export function createRescheduleAppointmentUseCase(deps: {
           })),
         };
       });
+
+      await deps.events.publish({
+        clinicId: cmd.clinicId,
+        date: loaded.appointment.onDate,
+        version: result.scheduleVersion,
+      });
+
+      return result;
     } catch (error) {
       if (isExclusionViolation(error)) throw new SlotConflictError();
       throw error;
