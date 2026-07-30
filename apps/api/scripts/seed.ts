@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { and, eq } from 'drizzle-orm';
 
-import { createDb } from '../src/infra/db/client.js';
+import { createDb, closeDb } from '../src/infra/db/client.js';
 import {
   appointmentTemplate,
   clinic,
@@ -40,354 +40,362 @@ const RESOURCE = {
   SCAN: '99999999-9999-4999-8999-999999999999',
 } as const;
 
-async function main(): Promise<void> {
-  const url = process.env['DATABASE_URL'];
-  if (url === undefined) throw new Error('DATABASE_URL is required');
-  const db = createDb(url, 1);
+export async function seedDatabase(databaseUrl: string): Promise<void> {
+  const db = createDb(databaseUrl, 1);
 
-  await db
-    .insert(clinic)
-    .values({
-      id: SEED_CLINIC_ID,
-      name: 'ScanFlow Demo Clinic',
-      timezone: 'Asia/Kolkata',
-      dayStart: '08:00:00',
-      dayEnd: '17:00:00',
-      slotMinutes: 15,
-    })
-    .onConflictDoNothing();
+  try {
+    await db
+      .insert(clinic)
+      .values({
+        id: SEED_CLINIC_ID,
+        name: 'ScanFlow Demo Clinic',
+        timezone: 'Asia/Kolkata',
+        dayStart: '08:00:00',
+        dayEnd: '17:00:00',
+        slotMinutes: 15,
+      })
+      .onConflictDoNothing();
 
-  await db
-    .insert(resource)
-    .values([
-      {
-        id: RESOURCE.DOCTOR,
+    await db
+      .insert(resource)
+      .values([
+        {
+          id: RESOURCE.DOCTOR,
+          clinicId: SEED_CLINIC_ID,
+          type: 'DOCTOR',
+          name: 'Dr. Ada',
+          modalities: [],
+          displayOrder: 1,
+          active: true,
+        },
+        {
+          id: RESOURCE.NMT,
+          clinicId: SEED_CLINIC_ID,
+          type: 'NMT_ROOM',
+          name: 'NMT Room 1',
+          modalities: [],
+          displayOrder: 2,
+          active: true,
+        },
+        {
+          id: RESOURCE.SCAN,
+          clinicId: SEED_CLINIC_ID,
+          type: 'SCAN_ROOM',
+          name: 'Scanner 1',
+          modalities: ['SPECT'],
+          displayOrder: 3,
+          active: true,
+        },
+      ])
+      .onConflictDoNothing();
+
+    // Mon–Fri 08:00–17:00 for every resource.
+    for (const resourceId of Object.values(RESOURCE)) {
+      for (const weekday of [1, 2, 3, 4, 5]) {
+        const existing = await db
+          .select()
+          .from(resourceWorkingHours)
+          .where(
+            and(
+              eq(resourceWorkingHours.resourceId, resourceId),
+              eq(resourceWorkingHours.weekday, weekday),
+            ),
+          )
+          .limit(1);
+        if (existing.length === 0) {
+          await db.insert(resourceWorkingHours).values({
+            resourceId,
+            weekday,
+            startsAt: '08:00:00',
+            endsAt: '17:00:00',
+          });
+        }
+      }
+    }
+
+    await db
+      .insert(serviceType)
+      .values([
+        {
+          id: SERVICE.CONSULT,
+          clinicId: SEED_CLINIC_ID,
+          code: 'CONSULT',
+          name: 'Consultation',
+          resourceType: 'DOCTOR',
+          requiredModality: null,
+        },
+        {
+          id: SERVICE.INJECT,
+          clinicId: SEED_CLINIC_ID,
+          code: 'INJECT',
+          name: 'Tracer injection',
+          resourceType: 'NMT_ROOM',
+          requiredModality: null,
+        },
+        {
+          id: SERVICE.SCAN,
+          clinicId: SEED_CLINIC_ID,
+          code: 'SCAN',
+          name: 'Scan',
+          resourceType: 'SCAN_ROOM',
+          requiredModality: null,
+        },
+        {
+          id: SERVICE.PROCESS,
+          clinicId: SEED_CLINIC_ID,
+          code: 'PROCESS',
+          name: 'Post-scan processing',
+          resourceType: 'NMT_ROOM',
+          requiredModality: null,
+        },
+      ])
+      .onConflictDoNothing();
+
+    await db
+      .insert(patient)
+      .values({
         clinicId: SEED_CLINIC_ID,
-        type: 'DOCTOR',
-        name: 'Dr. Ada',
-        modalities: [],
-        displayOrder: 1,
-        active: true,
+        mrn: SEED_PATIENT_IDENTIFIERS.mrn,
+        fullName: SEED_PATIENT_IDENTIFIERS.fullName,
+        dateOfBirth: SEED_PATIENT_IDENTIFIERS.dateOfBirth,
+        phone: SEED_PATIENT_IDENTIFIERS.phone,
+      })
+      .onConflictDoNothing();
+
+    interface StepSeed {
+      seq: number;
+      serviceTypeId: string;
+      durationMin: number;
+      minGapMin: number;
+      maxGapMin: number;
+      sameResourceAsSeq?: number;
+    }
+
+    const presets: {
+      code: string;
+      name: string;
+      steps: StepSeed[];
+    }[] = [
+      {
+        code: 'P1',
+        name: 'Consult only',
+        steps: [
+          {
+            seq: 1,
+            serviceTypeId: SERVICE.CONSULT,
+            durationMin: 30,
+            minGapMin: 0,
+            maxGapMin: 0,
+          },
+        ],
       },
       {
-        id: RESOURCE.NMT,
-        clinicId: SEED_CLINIC_ID,
-        type: 'NMT_ROOM',
-        name: 'NMT Room 1',
-        modalities: [],
-        displayOrder: 2,
-        active: true,
+        code: 'P2',
+        name: 'Scan only',
+        steps: [
+          {
+            seq: 1,
+            serviceTypeId: SERVICE.SCAN,
+            durationMin: 30,
+            minGapMin: 0,
+            maxGapMin: 0,
+          },
+        ],
       },
       {
-        id: RESOURCE.SCAN,
-        clinicId: SEED_CLINIC_ID,
-        type: 'SCAN_ROOM',
-        name: 'Scanner 1',
-        modalities: ['SPECT'],
-        displayOrder: 3,
-        active: true,
+        code: 'P3',
+        name: 'Standard scan',
+        steps: [
+          {
+            seq: 1,
+            serviceTypeId: SERVICE.CONSULT,
+            durationMin: 15,
+            minGapMin: 0,
+            maxGapMin: 0,
+          },
+          {
+            seq: 2,
+            serviceTypeId: SERVICE.SCAN,
+            durationMin: 30,
+            minGapMin: 0,
+            maxGapMin: 15,
+          },
+          {
+            seq: 3,
+            serviceTypeId: SERVICE.PROCESS,
+            durationMin: 30,
+            minGapMin: 0,
+            maxGapMin: 15,
+          },
+        ],
       },
-    ])
-    .onConflictDoNothing();
+      {
+        code: 'P4',
+        name: 'Uptake study',
+        steps: [
+          {
+            seq: 1,
+            serviceTypeId: SERVICE.CONSULT,
+            durationMin: 45,
+            minGapMin: 0,
+            maxGapMin: 0,
+          },
+          {
+            seq: 2,
+            serviceTypeId: SERVICE.INJECT,
+            durationMin: 30,
+            minGapMin: 0,
+            maxGapMin: 0,
+          },
+          {
+            seq: 3,
+            serviceTypeId: SERVICE.SCAN,
+            durationMin: 30,
+            minGapMin: 60,
+            maxGapMin: 90,
+          },
+          {
+            seq: 4,
+            serviceTypeId: SERVICE.SCAN,
+            durationMin: 30,
+            minGapMin: 0,
+            maxGapMin: 0,
+            sameResourceAsSeq: 3,
+          },
+          {
+            seq: 5,
+            serviceTypeId: SERVICE.CONSULT,
+            durationMin: 30,
+            minGapMin: 0,
+            maxGapMin: 30,
+            sameResourceAsSeq: 1,
+          },
+        ],
+      },
+      {
+        code: 'P5',
+        name: 'Two-phase delayed study',
+        steps: [
+          {
+            seq: 1,
+            serviceTypeId: SERVICE.CONSULT,
+            durationMin: 30,
+            minGapMin: 0,
+            maxGapMin: 0,
+          },
+          {
+            seq: 2,
+            serviceTypeId: SERVICE.INJECT,
+            durationMin: 15,
+            minGapMin: 0,
+            maxGapMin: 0,
+          },
+          {
+            seq: 3,
+            serviceTypeId: SERVICE.SCAN,
+            durationMin: 30,
+            minGapMin: 0,
+            maxGapMin: 15,
+          },
+          {
+            seq: 4,
+            serviceTypeId: SERVICE.SCAN,
+            durationMin: 30,
+            minGapMin: 120,
+            maxGapMin: 180,
+            sameResourceAsSeq: 3,
+          },
+          {
+            seq: 5,
+            serviceTypeId: SERVICE.CONSULT,
+            durationMin: 15,
+            minGapMin: 0,
+            maxGapMin: 30,
+            sameResourceAsSeq: 1,
+          },
+        ],
+      },
+      {
+        code: 'P6',
+        name: 'Injection and same-day imaging',
+        steps: [
+          {
+            seq: 1,
+            serviceTypeId: SERVICE.INJECT,
+            durationMin: 30,
+            minGapMin: 0,
+            maxGapMin: 0,
+          },
+          {
+            seq: 2,
+            serviceTypeId: SERVICE.SCAN,
+            durationMin: 45,
+            minGapMin: 45,
+            maxGapMin: 75,
+          },
+          {
+            seq: 3,
+            serviceTypeId: SERVICE.CONSULT,
+            durationMin: 30,
+            minGapMin: 0,
+            maxGapMin: 30,
+          },
+        ],
+      },
+    ];
 
-  // Mon–Fri 08:00–17:00 for every resource.
-  for (const resourceId of Object.values(RESOURCE)) {
-    for (const weekday of [1, 2, 3, 4, 5]) {
+    for (const preset of presets) {
       const existing = await db
         .select()
-        .from(resourceWorkingHours)
+        .from(appointmentTemplate)
         .where(
           and(
-            eq(resourceWorkingHours.resourceId, resourceId),
-            eq(resourceWorkingHours.weekday, weekday),
+            eq(appointmentTemplate.clinicId, SEED_CLINIC_ID),
+            eq(appointmentTemplate.code, preset.code),
           ),
         )
         .limit(1);
-      if (existing.length === 0) {
-        await db.insert(resourceWorkingHours).values({
-          resourceId,
-          weekday,
-          startsAt: '08:00:00',
-          endsAt: '17:00:00',
-        });
-      }
+      if (existing.length > 0) continue;
+
+      const inserted = await db
+        .insert(appointmentTemplate)
+        .values({
+          clinicId: SEED_CLINIC_ID,
+          code: preset.code,
+          name: preset.name,
+          isPreset: true,
+          active: true,
+        })
+        .returning();
+      const header = inserted[0];
+      if (header === undefined) continue;
+      await db.insert(templateStep).values(
+        preset.steps.map((step) => ({
+          templateId: header.id,
+          seq: step.seq,
+          serviceTypeId: step.serviceTypeId,
+          durationMin: step.durationMin,
+          minGapMin: step.minGapMin,
+          maxGapMin: step.maxGapMin,
+          setupMin: 0,
+          teardownMin: 0,
+          sameResourceAsSeq: step.sameResourceAsSeq,
+        })),
+      );
     }
-  }
 
-  await db
-    .insert(serviceType)
-    .values([
-      {
-        id: SERVICE.CONSULT,
-        clinicId: SEED_CLINIC_ID,
-        code: 'CONSULT',
-        name: 'Consultation',
-        resourceType: 'DOCTOR',
-        requiredModality: null,
-      },
-      {
-        id: SERVICE.INJECT,
-        clinicId: SEED_CLINIC_ID,
-        code: 'INJECT',
-        name: 'Tracer injection',
-        resourceType: 'NMT_ROOM',
-        requiredModality: null,
-      },
-      {
-        id: SERVICE.SCAN,
-        clinicId: SEED_CLINIC_ID,
-        code: 'SCAN',
-        name: 'Scan',
-        resourceType: 'SCAN_ROOM',
-        requiredModality: null,
-      },
-      {
-        id: SERVICE.PROCESS,
-        clinicId: SEED_CLINIC_ID,
-        code: 'PROCESS',
-        name: 'Post-scan processing',
-        resourceType: 'NMT_ROOM',
-        requiredModality: null,
-      },
-    ])
-    .onConflictDoNothing();
-
-  await db
-    .insert(patient)
-    .values({
-      clinicId: SEED_CLINIC_ID,
-      mrn: SEED_PATIENT_IDENTIFIERS.mrn,
-      fullName: SEED_PATIENT_IDENTIFIERS.fullName,
-      dateOfBirth: SEED_PATIENT_IDENTIFIERS.dateOfBirth,
-      phone: SEED_PATIENT_IDENTIFIERS.phone,
-    })
-    .onConflictDoNothing();
-
-  interface StepSeed {
-    seq: number;
-    serviceTypeId: string;
-    durationMin: number;
-    minGapMin: number;
-    maxGapMin: number;
-    sameResourceAsSeq?: number;
-  }
-
-  const presets: {
-    code: string;
-    name: string;
-    steps: StepSeed[];
-  }[] = [
-    {
-      code: 'P1',
-      name: 'Consult only',
-      steps: [
-        {
-          seq: 1,
-          serviceTypeId: SERVICE.CONSULT,
-          durationMin: 30,
-          minGapMin: 0,
-          maxGapMin: 0,
-        },
-      ],
-    },
-    {
-      code: 'P2',
-      name: 'Scan only',
-      steps: [
-        {
-          seq: 1,
-          serviceTypeId: SERVICE.SCAN,
-          durationMin: 30,
-          minGapMin: 0,
-          maxGapMin: 0,
-        },
-      ],
-    },
-    {
-      code: 'P3',
-      name: 'Standard scan',
-      steps: [
-        {
-          seq: 1,
-          serviceTypeId: SERVICE.CONSULT,
-          durationMin: 15,
-          minGapMin: 0,
-          maxGapMin: 0,
-        },
-        {
-          seq: 2,
-          serviceTypeId: SERVICE.SCAN,
-          durationMin: 30,
-          minGapMin: 0,
-          maxGapMin: 15,
-        },
-        {
-          seq: 3,
-          serviceTypeId: SERVICE.PROCESS,
-          durationMin: 30,
-          minGapMin: 0,
-          maxGapMin: 15,
-        },
-      ],
-    },
-    {
-      code: 'P4',
-      name: 'Uptake study',
-      steps: [
-        {
-          seq: 1,
-          serviceTypeId: SERVICE.CONSULT,
-          durationMin: 45,
-          minGapMin: 0,
-          maxGapMin: 0,
-        },
-        {
-          seq: 2,
-          serviceTypeId: SERVICE.INJECT,
-          durationMin: 30,
-          minGapMin: 0,
-          maxGapMin: 0,
-        },
-        {
-          seq: 3,
-          serviceTypeId: SERVICE.SCAN,
-          durationMin: 30,
-          minGapMin: 60,
-          maxGapMin: 90,
-        },
-        {
-          seq: 4,
-          serviceTypeId: SERVICE.SCAN,
-          durationMin: 30,
-          minGapMin: 0,
-          maxGapMin: 0,
-          sameResourceAsSeq: 3,
-        },
-        {
-          seq: 5,
-          serviceTypeId: SERVICE.CONSULT,
-          durationMin: 30,
-          minGapMin: 0,
-          maxGapMin: 30,
-          sameResourceAsSeq: 1,
-        },
-      ],
-    },
-    {
-      code: 'P5',
-      name: 'Two-phase delayed study',
-      steps: [
-        {
-          seq: 1,
-          serviceTypeId: SERVICE.CONSULT,
-          durationMin: 30,
-          minGapMin: 0,
-          maxGapMin: 0,
-        },
-        {
-          seq: 2,
-          serviceTypeId: SERVICE.INJECT,
-          durationMin: 15,
-          minGapMin: 0,
-          maxGapMin: 0,
-        },
-        {
-          seq: 3,
-          serviceTypeId: SERVICE.SCAN,
-          durationMin: 30,
-          minGapMin: 0,
-          maxGapMin: 15,
-        },
-        {
-          seq: 4,
-          serviceTypeId: SERVICE.SCAN,
-          durationMin: 30,
-          minGapMin: 120,
-          maxGapMin: 180,
-          sameResourceAsSeq: 3,
-        },
-        {
-          seq: 5,
-          serviceTypeId: SERVICE.CONSULT,
-          durationMin: 15,
-          minGapMin: 0,
-          maxGapMin: 30,
-          sameResourceAsSeq: 1,
-        },
-      ],
-    },
-    {
-      code: 'P6',
-      name: 'Injection and same-day imaging',
-      steps: [
-        {
-          seq: 1,
-          serviceTypeId: SERVICE.INJECT,
-          durationMin: 30,
-          minGapMin: 0,
-          maxGapMin: 0,
-        },
-        {
-          seq: 2,
-          serviceTypeId: SERVICE.SCAN,
-          durationMin: 45,
-          minGapMin: 45,
-          maxGapMin: 75,
-        },
-        {
-          seq: 3,
-          serviceTypeId: SERVICE.CONSULT,
-          durationMin: 30,
-          minGapMin: 0,
-          maxGapMin: 30,
-        },
-      ],
-    },
-  ];
-
-  for (const preset of presets) {
-    const existing = await db
-      .select()
-      .from(appointmentTemplate)
-      .where(
-        and(
-          eq(appointmentTemplate.clinicId, SEED_CLINIC_ID),
-          eq(appointmentTemplate.code, preset.code),
-        ),
-      )
-      .limit(1);
-    if (existing.length > 0) continue;
-
-    const inserted = await db
-      .insert(appointmentTemplate)
-      .values({
-        clinicId: SEED_CLINIC_ID,
-        code: preset.code,
-        name: preset.name,
-        isPreset: true,
-        active: true,
-      })
-      .returning();
-    const header = inserted[0];
-    if (header === undefined) continue;
-    await db.insert(templateStep).values(
-      preset.steps.map((step) => ({
-        templateId: header.id,
-        seq: step.seq,
-        serviceTypeId: step.serviceTypeId,
-        durationMin: step.durationMin,
-        minGapMin: step.minGapMin,
-        maxGapMin: step.maxGapMin,
-        setupMin: 0,
-        teardownMin: 0,
-        sameResourceAsSeq: step.sameResourceAsSeq,
-      })),
+    process.stdout.write(
+      `seed complete\n  CLINIC_ID=${SEED_CLINIC_ID}\n  resources=3 serviceTypes=4 presets=6\n`,
     );
+  } finally {
+    await closeDb(db);
   }
+}
 
-  process.stdout.write(
-    `seed complete\n  CLINIC_ID=${SEED_CLINIC_ID}\n  resources=3 serviceTypes=4 presets=6\n`,
-  );
+async function main(): Promise<void> {
+  const url = process.env['DATABASE_URL'];
+  if (url === undefined) throw new Error('DATABASE_URL is required');
+  await seedDatabase(url);
 }
 
 const isDirectRun =

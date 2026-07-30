@@ -104,10 +104,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - name: Run integration tests
-        run: pnpm test:integration
+        # Bypass Turbo so nested tooling cannot contend on the pnpm store lock.
+        run: pnpm --filter @scanflow/api test:integration
         env:
           # Ryuk can hang on some runners; the suite tears the container down itself.
           TESTCONTAINERS_RYUK_DISABLED: 'true'
+          DEBUG: 'testcontainers*'
 
   bench:
     name: bench
