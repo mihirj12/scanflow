@@ -110,6 +110,45 @@ export class ValidationFailedError extends DomainError {
   }
 }
 
+/**
+ * One error for "no such email" and "wrong password" on purpose. Distinguishing
+ * them turns the login form into an account-enumeration oracle.
+ */
+export class InvalidCredentialsError extends DomainError {
+  constructor() {
+    super({
+      type: 'https://scanflow.local/problems/invalid-credentials',
+      title: 'Sign-in failed',
+      status: 401,
+      detail: 'That email and password combination is not recognised.',
+    });
+  }
+}
+
+export class UnauthenticatedError extends DomainError {
+  constructor(
+    detail = 'Sign in to continue. This endpoint requires an access token.',
+  ) {
+    super({
+      type: 'https://scanflow.local/problems/unauthenticated',
+      title: 'Not signed in',
+      status: 401,
+      detail,
+    });
+  }
+}
+
+export class ForbiddenError extends DomainError {
+  constructor(required: readonly string[]) {
+    super({
+      type: 'https://scanflow.local/problems/forbidden',
+      title: 'Not permitted',
+      status: 403,
+      detail: `Your role cannot perform this action. Required: ${required.join(' or ')}.`,
+    });
+  }
+}
+
 export class IdempotencyConflictError extends DomainError {
   constructor() {
     super({

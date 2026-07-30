@@ -5,6 +5,7 @@ import {
   appointmentStatusSchema,
   resourceTypeSchema,
   segmentKindSchema,
+  userRoleSchema,
 } from './enums.js';
 
 /** Calendar date as `YYYY-MM-DD`. Clinic-local; never a timestamp. */
@@ -309,6 +310,72 @@ export const createAppointmentTemplateBodySchema = z.object({
 export type CreateAppointmentTemplateBody = z.infer<
   typeof createAppointmentTemplateBodySchema
 >;
+
+// ---------------------------------------------------------------------------
+// Authentication
+// ---------------------------------------------------------------------------
+
+export const loginBodySchema = z.object({
+  email: z.email().max(320),
+  /**
+   * Only a floor is enforced here. An upper bound still matters: argon2id will
+   * happily hash a megabyte and that is a free CPU exhaustion vector.
+   */
+  password: z.string().min(8).max(200),
+});
+
+export type LoginBody = z.infer<typeof loginBodySchema>;
+
+export const currentUserSchema = z.object({
+  id: z.uuid(),
+  email: z.string(),
+  displayName: z.string(),
+  role: userRoleSchema,
+});
+
+export type CurrentUser = z.infer<typeof currentUserSchema>;
+
+/**
+ * The access token is returned in the body, to be held in memory only. The
+ * refresh token is never in a body — it travels as an httpOnly cookie, so
+ * JavaScript on the page cannot read it (spec 9).
+ */
+export const sessionResponseSchema = z.object({
+  accessToken: z.string(),
+  expiresInSeconds: z.number().int().positive(),
+  user: currentUserSchema,
+});
+
+export type SessionResponse = z.infer<typeof sessionResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// Audit trail (ADMIN only)
+// ---------------------------------------------------------------------------
+
+export const auditEntrySchema = z.object({
+  id: z.number().int(),
+  action: z.string(),
+  entity: z.string(),
+  entityId: z.uuid().nullable(),
+  actorId: z.uuid().nullable(),
+  actorEmail: z.string().nullable(),
+  at: instantSchema,
+});
+
+export type AuditEntry = z.infer<typeof auditEntrySchema>;
+
+export const listAuditQuerySchema = z.object({
+  entityId: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+export type ListAuditQuery = z.infer<typeof listAuditQuerySchema>;
+
+export const listAuditResponseSchema = z.object({
+  items: z.array(auditEntrySchema),
+});
+
+export type ListAuditResponse = z.infer<typeof listAuditResponseSchema>;
 
 export const healthResponseSchema = z.object({
   status: z.literal('ok'),

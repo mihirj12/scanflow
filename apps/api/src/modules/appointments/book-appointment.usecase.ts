@@ -37,7 +37,9 @@ import type { NewSegment, ServiceTypeRecord } from '../shared/records.js';
 import type {
   AppointmentRepository,
   AuditRepository,
+  BookingMetrics,
   PatientRepository,
+  ScheduleEventPublisher,
   TemplateRepository,
   UnitOfWork,
 } from './ports.js';
@@ -53,6 +55,8 @@ export interface BookAppointmentDeps {
   appointments: AppointmentRepository;
   templates: TemplateRepository;
   audit: AuditRepository;
+  events: ScheduleEventPublisher;
+  metrics: BookingMetrics;
 }
 
 export interface BookAppointmentCommand extends BookAppointmentBody {
@@ -117,8 +121,10 @@ export function createBookAppointmentUseCase(deps: BookAppointmentDeps) {
     const day = clinicDayWindow(clinic.grid, cmd.date);
     const resourceIds = resources.map((r) => r.id);
 
+    deps.metrics.bookingAttempted();
+
     try {
-      return await deps.uow.run(async (tx) => {
+      const result = await deps.uow.run(async (tx) => {
         const version = await deps.scheduleVersions.selectForUpdate(
           tx,
           cmd.clinicId,
@@ -228,8 +234,25 @@ export function createBookAppointmentUseCase(deps: BookAppointmentDeps) {
           })),
         };
       });
+
+      await deps.events.publish({
+        clinicId: cmd.clinicId,
+        date: cmd.date,
+        version: result.scheduleVersion,
+      });
+
+      return result;
     } catch (error) {
-      if (isExclusionViolation(error)) throw new SlotConflictError();
+      if (isExclusionViolation(error)) {
+        deps.metrics.bookingConflicted();
+        throw new SlotConflictError();
+      }
+      if (
+        error instanceof StaleScheduleError ||
+        error instanceof SlotConflictError
+      ) {
+        deps.metrics.bookingConflicted();
+      }
       throw error;
     }
   };

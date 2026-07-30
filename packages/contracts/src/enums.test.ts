@@ -25,6 +25,7 @@ describe('enum schemas', () => {
         'CANCELLED',
         'NO_SHOW',
       ],
+      user_role: ['RECEPTIONIST', 'CLINICIAN', 'ADMIN'],
     });
   });
 

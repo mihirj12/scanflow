@@ -137,11 +137,11 @@ request/response Zod schema the API and the future wizard share. The engine
 types (`Candidate`, `EngineStep`, …) stay in `scheduling-core` in slot units;
 contracts speak minutes and ISO instants.
 
-### D21 — `POST /appointment-templates` is open until M6 auth
+### D21 — Template creation and audit are ADMIN-only (M6)
 
-Spec 5.3 marks template creation ADMIN-only. There is no auth layer yet (M6), so
-the endpoint is reachable without a role check. Documented rather than stubbing
-a fake admin gate that would have to be ripped out.
+Spec 5.3 marks template creation ADMIN-only. M6 adds JWT auth and
+`requireRole('ADMIN')` on `POST /appointment-templates` and `GET /audit`.
+Until then the endpoints were open (documented in the original D21 note).
 
 ### D22 — Idempotency lives in its own table (migration 0001)
 
@@ -169,11 +169,11 @@ and repair `sameResourceAsSeq` through the same normaliser a drag end would
 call. A pointer drag handle can be layered on later without changing the data
 path.
 
-### D26 — "Save as preset" deferred until M6 auth
+### D26 — "Save as preset" still deferred in the wizard UI
 
-Spec 7.1.1 shows Save as preset for ADMIN only. There is no auth yet (see D21),
-so the action is omitted rather than exposing template writes to every user or
-stubbing a fake role gate.
+Spec 7.1.1 shows Save as preset for ADMIN only. M6 adds auth and protects
+`POST /appointment-templates`, but the wizard button is not wired yet — an
+admin can create templates via API only until a follow-up adds the control.
 
 ### D27 — `start` and `complete` status endpoints were added in M5
 

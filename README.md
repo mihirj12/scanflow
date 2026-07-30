@@ -25,7 +25,7 @@ application level.
 
 ## Status
 
-Phases **M0** through **M4** are complete. **M5 — Management UI** is in progress.
+Phases **M0** through **M5** are complete. **M6 — Auth, RBAC, SSE, seed polish** is on branch `feat/m6-hardening`.
 
 | Phase  | Deliverable                                              | State       |
 | ------ | -------------------------------------------------------- | ----------- |
@@ -34,8 +34,8 @@ Phases **M0** through **M4** are complete. **M5 — Management UI** is in progre
 | M2     | Express API, repositories, integration tests             | Complete    |
 | M3     | Read-only schedule grid                                  | Complete    |
 | M4     | Suggestions, booking wizard, conflict recovery           | Complete    |
-| **M5** | **Management UI: drawer, kebab menu, command palette**   | In progress |
-| M6     | Auth, RBAC, audit, SSE, seed polish                      | Not started |
+| M5     | Management UI: drawer, kebab menu, command palette       | Complete    |
+| **M6** | **Auth, RBAC, audit, SSE, seed polish**                  | In progress |
 
 ## Quickstart
 

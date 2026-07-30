@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { SEED_PATIENT_IDENTIFIERS } from '../scripts/seed.js';
 import { createApp } from '../src/http/app.js';
 import { formatTstzrange } from '../src/infra/db/tstzrange.js';
-import { agent, appContainer, FIXTURE_DATE } from './setup.js';
+import { agent, appContainer, FIXTURE_DATE, signIn } from './setup.js';
 
 function sqlStateOf(error: unknown): string | undefined {
   if (typeof error === 'object' && error !== null && 'code' in error) {
@@ -324,8 +324,10 @@ describe('M2 API integration', () => {
       throw new Error('doctor or scanner missing');
     }
 
-    const start = new Date('2026-08-10T02:30:00.000Z');
-    const end = new Date('2026-08-10T03:00:00.000Z');
+    // Use a date the demo-day seed never touches — 2026-08-10 is DEMO_NORMAL_DATE.
+    const constraintDate = '2099-03-15';
+    const start = new Date('2099-03-15T02:30:00.000Z');
+    const end = new Date('2099-03-15T03:00:00.000Z');
     const during = formatTstzrange(start, end);
     const pid = await patientId();
     const clinicId = appContainer.config.CLINIC_ID;
@@ -334,7 +336,7 @@ describe('M2 API integration', () => {
     try {
       const inserted = await raw<[{ id: string }]>`
         INSERT INTO appointment (clinic_id, patient_id, on_date, status)
-        VALUES (${clinicId}::uuid, ${pid}::uuid, '2026-08-10', 'SCHEDULED')
+        VALUES (${clinicId}::uuid, ${pid}::uuid, ${constraintDate}, 'SCHEDULED')
         RETURNING id
       `;
       const appointmentId = inserted[0]?.id;
@@ -392,7 +394,7 @@ describe('M2 API integration', () => {
         teardownMin: 0,
       },
     ];
-    const date = '2026-08-10';
+    const date = '2099-03-16';
 
     const firstSug = await agent
       .post('/api/v1/appointments/suggestions')
@@ -598,13 +600,18 @@ describe('M2 API integration', () => {
       },
     );
     const { app } = createApp(appContainer, { log });
-    const local = request(app);
+    const localRaw = request(app);
+    const token = await signIn(localRaw, 'RECEPTIONIST');
     const pid = await patientId();
 
     // Bodies carry identifiers; the req serializer must not echo them.
-    await local.get('/api/v1/patients').expect(200);
-    await local
+    await localRaw
+      .get('/api/v1/patients')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    await localRaw
       .post('/api/v1/appointments/suggestions')
+      .set('Authorization', `Bearer ${token}`)
       .send({
         patientId: pid,
         date: '2099-01-06',

@@ -5,27 +5,87 @@ import type {
   BookAppointmentResponse,
   CandidateDto,
   CreatePatientBody,
+  CurrentUser,
   GetScheduleResponse,
   ListAppointmentsResponse,
+  LoginBody,
   PatientDto,
   ProblemDetails,
   RescheduleAppointmentBody,
   ResourceDto,
   ServiceTypeDto,
+  SessionResponse,
   SuggestAppointmentsBody,
   SuggestAppointmentsResponse,
 } from '@scanflow/contracts';
 import { problemDetailsSchema } from '@scanflow/contracts';
 
+import { getAccessToken, setAccessToken } from '../auth/access-token';
+
 /**
  * Thin fetch wrapper. Paths are relative so the Vite proxy (and later the
  * reverse proxy) can route `/api` without baking a host into the bundle.
+ *
+ * Every call carries the in-memory access token, and a 401 triggers exactly one
+ * refresh-and-retry. `pendingRefresh` collapses the stampede that would
+ * otherwise happen when a token expires while six queries are in flight.
  */
-export async function apiGet<T>(path: string): Promise<T> {
+let pendingRefresh: Promise<boolean> | null = null;
+
+async function refreshOnce(): Promise<boolean> {
+  pendingRefresh ??= (async () => {
+    try {
+      const response = await fetch('/api/v1/auth/refresh', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) {
+        setAccessToken(null);
+        return false;
+      }
+      const session = (await response.json()) as SessionResponse;
+      setAccessToken(session.accessToken);
+      return true;
+    } catch {
+      setAccessToken(null);
+      return false;
+    } finally {
+      // Cleared in a microtask so concurrent callers all see this attempt.
+      queueMicrotask(() => {
+        pendingRefresh = null;
+      });
+    }
+  })();
+  return pendingRefresh;
+}
+
+async function request<T>(
+  path: string,
+  init: RequestInit,
+  retryOn401 = true,
+): Promise<T> {
+  const token = getAccessToken();
+  const headers = new Headers(init.headers);
+  headers.set('Accept', 'application/json');
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`);
+
   const response = await fetch(path, {
-    headers: { Accept: 'application/json' },
+    ...init,
+    headers,
+    credentials: 'include',
   });
+
+  if (response.status === 401 && retryOn401) {
+    const refreshed = await refreshOnce();
+    if (refreshed) return request<T>(path, init, false);
+  }
+
   return parseJsonResponse<T>(response);
+}
+
+export async function apiGet<T>(path: string): Promise<T> {
+  return request<T>(path, { method: 'GET' });
 }
 
 export async function apiPost<T>(
@@ -34,18 +94,66 @@ export async function apiPost<T>(
   options: { idempotencyKey?: string } = {},
 ): Promise<T> {
   const headers: Record<string, string> = {
-    Accept: 'application/json',
     'Content-Type': 'application/json',
   };
   if (options.idempotencyKey !== undefined) {
     headers['Idempotency-Key'] = options.idempotencyKey;
   }
-  const response = await fetch(path, {
+  return request<T>(path, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
   });
-  return parseJsonResponse<T>(response);
+}
+
+// ---------------------------------------------------------------------------
+// Session
+// ---------------------------------------------------------------------------
+
+export async function login(body: LoginBody): Promise<SessionResponse> {
+  const session = await request<SessionResponse>(
+    '/api/v1/auth/login',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+    // A failed sign-in must not trigger a refresh attempt.
+    false,
+  );
+  setAccessToken(session.accessToken);
+  return session;
+}
+
+/** Restores a session from the refresh cookie. Returns null when there is none. */
+export async function restoreSession(): Promise<SessionResponse | null> {
+  const response = await fetch('/api/v1/auth/refresh', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  if (!response.ok) {
+    setAccessToken(null);
+    return null;
+  }
+  const session = (await response.json()) as SessionResponse;
+  setAccessToken(session.accessToken);
+  return session;
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await fetch('/api/v1/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+    });
+  } finally {
+    setAccessToken(null);
+  }
+}
+
+export function fetchCurrentUser(): Promise<CurrentUser> {
+  return apiGet<CurrentUser>('/api/v1/auth/me');
 }
 
 /** Typed problem+json failure from the API (including 409 with freshCandidates). */
