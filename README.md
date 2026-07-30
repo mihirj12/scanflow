@@ -57,7 +57,7 @@ the web shell; there is nothing to serve from the API until M2.
 ## Architecture in ten lines
 
 ```
-apps/web            React 18 + Vite. Schedule grid, booking wizard.
+apps/web            React 19 + Vite. Schedule grid, booking wizard.
 apps/api            Express 5. http/ → modules/ → infra/, wired in container.ts.
 packages/scheduling-core   Pure engine. Zero dependencies, zero async, zero I/O.
 packages/contracts  Zod schemas + inferred types, imported by both apps.
