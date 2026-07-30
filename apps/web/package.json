@@ -12,10 +12,12 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@hookform/resolvers": "5.2.2",
     "@scanflow/contracts": "workspace:*",
     "@tanstack/react-query": "5.101.4",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "react-hook-form": "7.66.0"
   },
   "devDependencies": {
     "@scanflow/config": "workspace:*",

@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useState, type ReactElement } from 'react';
 
+import { BookingWizard } from './booking/BookingWizard';
+import type { GhostSegment } from './booking/ghost-preview';
 import { ScheduleGrid } from './schedule/ScheduleGrid';
 import { formatUpdatedAgo, useSchedule } from './schedule/use-schedule';
 
@@ -28,8 +30,25 @@ export function App(): ReactElement {
 
 function AppShell(): ReactElement {
   const [date, setDate] = useState(defaultClinicDate);
-  const { view, isLoading, isError, error, dataUpdatedAt } = useSchedule(date);
+  const { view, schedule, isLoading, isError, error, dataUpdatedAt } =
+    useSchedule(date);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardSession, setWizardSession] = useState(0);
+  const [ghostSegments, setGhostSegments] = useState<GhostSegment[]>([]);
+
+  const clearGhosts = useCallback(() => {
+    setGhostSegments([]);
+  }, []);
+
+  const onGhostChange = useCallback((ghosts: GhostSegment[]) => {
+    setGhostSegments(ghosts);
+  }, []);
+
+  const openWizardStable = useCallback(() => {
+    setWizardSession((session) => session + 1);
+    setWizardOpen(true);
+  }, []);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -39,6 +58,32 @@ function AppShell(): ReactElement {
       window.clearInterval(id);
     };
   }, []);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.key !== 'n' && event.key !== 'N') return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName;
+        if (
+          tag === 'INPUT' ||
+          tag === 'TEXTAREA' ||
+          tag === 'SELECT' ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+      }
+      if (wizardOpen) return;
+      event.preventDefault();
+      openWizardStable();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [wizardOpen, openWizardStable]);
 
   return (
     <div className="app">
@@ -54,6 +99,13 @@ function AppShell(): ReactElement {
             }}
           />
         </label>
+        <button
+          type="button"
+          className="btn btn--primary"
+          onClick={openWizardStable}
+        >
+          Book
+        </button>
         <p className="app__live" aria-live="polite">
           {formatUpdatedAgo(dataUpdatedAt, nowMs)}
         </p>
@@ -67,15 +119,44 @@ function AppShell(): ReactElement {
             {error instanceof Error ? `: ${error.message}` : '.'} Check that the
             API is running, then pick the date again.
           </p>
-        ) : view === undefined || view.segments.length === 0 ? (
-          <p className="app__empty">No appointments. Press N to book one.</p>
+        ) : view === undefined ? (
+          <p className="app__empty">No schedule data for this date.</p>
         ) : (
-          <ScheduleGrid
-            lanes={view.lanes}
-            segments={view.segments}
-            timeLabels={view.timeLabels}
-            totalSlots={view.totalSlots}
-          />
+          <div
+            className={[
+              'app__workspace',
+              wizardOpen ? 'app__workspace--booking' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            <div className="app__grid-pane">
+              {view.segments.length === 0 ? (
+                <p className="app__empty">
+                  No appointments. Press N to book one.
+                </p>
+              ) : null}
+              <ScheduleGrid
+                lanes={view.lanes}
+                segments={view.segments}
+                timeLabels={view.timeLabels}
+                totalSlots={view.totalSlots}
+                ghostSegments={ghostSegments}
+              />
+            </div>
+            <BookingWizard
+              key={wizardSession}
+              open={wizardOpen}
+              onClose={() => {
+                clearGhosts();
+                setWizardOpen(false);
+              }}
+              viewedDate={date}
+              schedule={schedule}
+              lanes={view.lanes}
+              onGhostChange={onGhostChange}
+            />
+          </div>
         )}
       </main>
     </div>
