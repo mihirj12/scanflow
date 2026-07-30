@@ -10,7 +10,6 @@ import {
   DEMO_NORMAL_DATE,
   SEED_USERS,
 } from '../scripts/seed-demo-days.js';
-import { closeDb } from '../src/infra/db/client.js';
 import { appointment } from '../src/infra/db/schema.js';
 import {
   agent,
@@ -21,6 +20,15 @@ import {
 } from './setup.js';
 
 describe.sequential('M6 auth, RBAC, readiness, and seed polish', () => {
+  it('accepts the documented demo password for each role', async () => {
+    for (const user of SEED_USERS) {
+      await rawAgent
+        .post('/api/v1/auth/login')
+        .send({ email: user.email, password: DEFAULT_SEED_PASSWORD })
+        .expect(200);
+    }
+  });
+
   it('returns 401 for unauthenticated /api/v1 routes but not /health', async () => {
     await rawAgent.get('/api/v1/health').expect(200, { status: 'ok' });
     await rawAgent.get('/api/v1/schedule?date=2026-08-03').expect(401);
@@ -121,7 +129,8 @@ describe.sequential('M6 auth, RBAC, readiness, and seed polish', () => {
 
   it('opens an SSE stream and delivers schedule-changed after a booking', async () => {
     const token = await signIn(rawAgent, 'RECEPTIONIST');
-    const date = '2026-08-22';
+    // Far-future weekday so demo-day seed and other tests leave the day empty.
+    const date = '2099-04-07';
 
     const patients = await agent.get('/api/v1/patients').expect(200);
     const patient = (patients.body as { items: { id: string }[] }).items[0];
@@ -187,10 +196,18 @@ describe.sequential('M6 auth, RBAC, readiness, and seed polish', () => {
   });
 
   it('returns 503 from /ready when Postgres is unreachable', async () => {
-    await closeDb(appContainer.db);
-    const response = await rawAgent.get('/api/v1/ready').expect(503);
-    expect((response.body as { status: number }).status).toBe(503);
-    expect((response.body as { title: string }).title).toBe('Not ready');
+    const clinics = appContainer.repos.clinics;
+    const original = clinics.getById.bind(clinics);
+    clinics.getById = async () => {
+      throw new Error('connection refused');
+    };
+    try {
+      const response = await rawAgent.get('/api/v1/ready').expect(503);
+      expect((response.body as { status: number }).status).toBe(503);
+      expect((response.body as { title: string }).title).toBe('Not ready');
+    } finally {
+      clinics.getById = original;
+    }
   });
 });
 
@@ -245,15 +262,3 @@ function waitForSseEvent(
       });
   });
 }
-
-/** Sanity: demo logins match the documented seed users. */
-describe('M6 seeded users', () => {
-  it('accepts the documented demo password for each role', async () => {
-    for (const user of SEED_USERS) {
-      await rawAgent
-        .post('/api/v1/auth/login')
-        .send({ email: user.email, password: DEFAULT_SEED_PASSWORD })
-        .expect(200);
-    }
-  });
-});
