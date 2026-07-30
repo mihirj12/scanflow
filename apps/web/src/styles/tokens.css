@@ -1,0 +1,63 @@
+/**
+ * Design tokens.
+ *
+ * The four segment colours are taken from the clinic's existing spreadsheet so
+ * that a receptionist recognises a doctor block as a doctor block on day one.
+ * They are the only colours allowed to encode meaning; --accent is the only
+ * colour allowed to signal interactivity, and it is deliberately outside the
+ * segment palette so a focus ring can never be misread as a booking.
+ *
+ * Row height and font size are not preferences: 36 rows at 28px plus the header
+ * is what makes a full clinic day fit on a 1080p screen without scrolling.
+ */
+:root {
+  /* Segment palette — meaning only, never decoration. */
+  --seg-doctor: #c2410c;
+  --seg-doctor-wash: #fff1e9;
+  --seg-nmt: #1d4ed8;
+  --seg-nmt-wash: #eaefff;
+  --seg-scan: #14603c;
+  --seg-scan-wash: #e7f4ed;
+  --seg-patient: #52525b;
+  --seg-patient-wash: #f2f2f4;
+
+  /* Interaction — distinct from every segment colour. */
+  --accent: #7c1d6f;
+  --accent-wash: #f7e9f5;
+
+  /* Availability wash on the grid. */
+  --slot-available: #f4fbf5;
+  --slot-unavailable: transparent;
+
+  /* Surfaces and hairlines. Flat, not card-and-shadow. */
+  --surface: #ffffff;
+  --surface-sunken: #fafafa;
+  --border: #e4e4e7;
+  --border-strong: #a1a1aa;
+
+  --text: #18181b;
+  --text-muted: #52525b;
+  --text-faint: #71717a;
+
+  /* Type. A single grotesque; tabular figures so the time gutter aligns. */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-size-body: 13px;
+  --font-size-grid: 13px;
+  --font-size-heading: 15px;
+  --line-height: 1.4;
+
+  /* Density. */
+  --slot-height: 28px;
+  --slots-per-day: 36;
+  --grid-header-height: 32px;
+  --time-gutter-width: 72px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+
+  /* A held or tentative booking renders at this opacity with a dashed border. */
+  --held-opacity: 0.35;
+}

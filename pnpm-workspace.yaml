@@ -1,0 +1,10 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# pnpm blocks dependency lifecycle scripts by default. Both of these are native
+# binaries that genuinely need a postinstall to unpack a platform build:
+# esbuild backs Vite, unrs-resolver backs eslint-plugin-import-x.
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true

@@ -1,0 +1,41 @@
+name: scanflow
+
+services:
+  postgres:
+    # The official image bundles contrib, which is where btree_gist comes from.
+    # Migration 0000 needs it for the two overlap exclusion constraints.
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-scanflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scanflow}
+      POSTGRES_DB: ${POSTGRES_DB:-scanflow}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - scanflow-pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${POSTGRES_USER:-scanflow} -d ${POSTGRES_DB:-scanflow}',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    # Present from M0 so the compose file is not rewritten later; the SSE
+    # fan-out that uses it is wired in M6.
+    image: redis:7-alpine
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  scanflow-pgdata:

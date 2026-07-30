@@ -1,0 +1,24 @@
+{
+  "name": "@scanflow/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings=0",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:verify": "tsx scripts/verify-schema.ts"
+  },
+  "dependencies": {
+    "@scanflow/contracts": "workspace:*",
+    "drizzle-orm": "0.45.2",
+    "postgres": "3.4.9"
+  },
+  "devDependencies": {
+    "@scanflow/config": "workspace:*",
+    "@types/node": "26.1.2",
+    "dotenv": "17.4.2",
+    "tsx": "4.23.1"
+  }
+}

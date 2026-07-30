@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+.turbo/
+pnpm-lock.yaml
+
+# Hand-written DDL. The alignment in these files is deliberate and is read as a
+# specification; no formatter should reflow it.
+apps/api/drizzle/**/*.sql
