@@ -25,17 +25,17 @@ application level.
 
 ## Status
 
-Phases **M0** through **M5** are complete. **M6 — Auth, RBAC, SSE, seed polish** is on branch `feat/m6-hardening`.
+Phases **M0** through **M6** are complete.
 
-| Phase  | Deliverable                                              | State       |
-| ------ | -------------------------------------------------------- | ----------- |
-| M0     | Monorepo, tooling, CI, Compose, schema, migrations, ADRs | Complete    |
-| M1     | Scheduling engine + property tests                       | Complete    |
-| M2     | Express API, repositories, integration tests             | Complete    |
-| M3     | Read-only schedule grid                                  | Complete    |
-| M4     | Suggestions, booking wizard, conflict recovery           | Complete    |
-| M5     | Management UI: drawer, kebab menu, command palette       | Complete    |
-| **M6** | **Auth, RBAC, audit, SSE, seed polish**                  | In progress |
+| Phase | Deliverable                                              | State    |
+| ----- | -------------------------------------------------------- | -------- |
+| M0    | Monorepo, tooling, CI, Compose, schema, migrations, ADRs | Complete |
+| M1    | Scheduling engine + property tests                       | Complete |
+| M2    | Express API, repositories, integration tests             | Complete |
+| M3    | Read-only schedule grid                                  | Complete |
+| M4    | Suggestions, booking wizard, conflict recovery           | Complete |
+| M5    | Management UI: drawer, kebab menu, command palette       | Complete |
+| M6    | Auth, RBAC, audit, SSE, seed polish                      | Complete |
 
 ## Quickstart
 
