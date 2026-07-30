@@ -106,14 +106,16 @@ monotonicity. A tenth test measures the generator itself and fails if it drifts
 into producing mostly unschedulable days, because a property suite that asserts
 things about empty arrays proves nothing.
 
-**Benchmark: p95 of 3.25 ms against a 50 ms budget** — 15× headroom. `pnpm bench`
-measures 300 pseudo-random days per case, from a fixed seed so a regression is a
-regression and not a bad roll:
+**Benchmark: p95 of 5.35 ms against a 50 ms budget** — 9× headroom. `pnpm bench`
+measures 300 pseudo-random days per case from a fixed seed, so a regression is a
+regression and not a bad roll. These are the numbers from a GitHub-hosted runner
+rather than from a fast laptop, because a performance claim should be one anybody
+can reproduce:
 
 | Case            | Shape                                                                         | p95     | max     |
 | --------------- | ----------------------------------------------------------------------------- | ------- | ------- |
-| Spec worst case | 6 steps, 4 resources per type, wide gap windows, 50% occupancy                | 1.54 ms | 3.35 ms |
-| Deep dead ends  | as above, but the last step needs a modality only one 95%-booked resource has | 3.25 ms | 5.33 ms |
+| Spec worst case | 6 steps, 4 resources per type, wide gap windows, 50% occupancy                | 2.42 ms | 4.95 ms |
+| Deep dead ends  | as above, but the last step needs a modality only one 95%-booked resource has | 5.35 ms | 8.22 ms |
 
 The second case exists because the first turned out to be the easier one: with a
 pool of four resources the engine usually finds a zero-slack layout immediately and
@@ -121,8 +123,8 @@ the bound prunes everything else. Making the _final_ step scarce forces the sear
 to explore to full depth and fail, with no good candidate to tighten the bound
 against — which is the shape that would expose a wrong bound.
 
-Those figures are from a development machine. CI runs the same benchmark on every
-push and fails the build if p95 reaches the budget, so the claim cannot go stale.
+CI runs this on every push and fails the build if p95 reaches the budget, so the
+figure above cannot quietly go stale.
 
 ## Why double-booking is impossible
 

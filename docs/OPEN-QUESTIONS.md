@@ -259,12 +259,16 @@ than approximately true.
 Spec 4.7 names one worst case: 6 steps, 4 resources per type, wide gap windows,
 50% occupancy. Measured, it is not the worst case — with four resources per type
 the engine almost always finds a zero-slack layout at the first few starts, and
-the bound then prunes the entire remaining search. p95 is 1.54 ms.
+the bound then prunes the entire remaining search. p95 is 2.42 ms.
 
 A second case was added where the last step requires a modality only one 95%-booked
 resource provides. Steps 1 to 5 explore freely and the search fails at full depth
 with almost no candidates to tighten the bound against, which is the shape that
-would actually expose a wrong bound. It is roughly twice as slow, at 3.25 ms.
+would actually expose a wrong bound. It is roughly twice as slow, at 5.35 ms.
+
+Both figures are quoted from a GitHub-hosted runner rather than a development
+machine, which measures about 1.6× faster. A stated bound is more useful when it
+comes from the environment anyone can reproduce.
 
 Both are reported and both are asserted against the 50 ms budget. Reporting only
 the spec's case would have overstated the engine by flattering it with the easier
