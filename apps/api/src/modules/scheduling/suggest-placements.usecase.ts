@@ -42,6 +42,7 @@ import type {
   ScheduleVersionRepository,
   SegmentRepository,
   ServiceTypeRepository,
+  SuggestionMetrics,
 } from './ports.js';
 
 export interface SuggestPlacementsDeps {
@@ -51,6 +52,7 @@ export interface SuggestPlacementsDeps {
   segments: SegmentRepository;
   scheduleVersions: ScheduleVersionRepository;
   patients: PatientRepository;
+  metrics: SuggestionMetrics;
 }
 
 export interface SuggestPlacementsCommand extends SuggestAppointmentsBody {
@@ -155,13 +157,19 @@ export function createSuggestPlacementsUseCase(deps: SuggestPlacementsDeps) {
       );
     }
 
-    const candidates = suggestPlacements({
+    // Times the engine only, not the queries around it: the metric answers
+    // "is the search slow", and a slow database is a different question.
+    const startedAt = performance.now();
+    const computed = suggestPlacements({
       totalSlots: day.totalSlots,
       steps: engineSteps,
       resources: engineResources,
       patientBusyMask,
       maxCandidates: 5,
-    }).filter(
+    });
+    deps.metrics.suggestionComputed(performance.now() - startedAt);
+
+    const candidates = computed.filter(
       (candidate) =>
         candidate.startSlot >= earliestSlot &&
         candidate.endSlot <= latestEndSlot,

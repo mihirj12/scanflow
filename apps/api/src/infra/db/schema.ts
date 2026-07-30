@@ -16,6 +16,7 @@ import {
   RESOURCE_TYPES,
   SEGMENT_KINDS,
   SEGMENT_STATUSES,
+  USER_ROLES,
 } from '@scanflow/contracts';
 import {
   bigint,
@@ -31,6 +32,7 @@ import {
   text,
   time,
   timestamp,
+  unique,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -46,6 +48,7 @@ export const appointmentStatusEnum = pgEnum(
   'appointment_status',
   APPOINTMENT_STATUSES,
 );
+export const userRoleEnum = pgEnum('user_role', USER_ROLES);
 
 /**
  * A `tstzrange`, carried as its Postgres literal form (for example
@@ -299,6 +302,46 @@ export const idempotencyRecord = pgTable(
   (t) => [primaryKey({ columns: [t.clinicId, t.key] })],
 );
 
+/** See migration 0002. Emails are stored lowercased; the unique index is the login key. */
+export const appUser = pgTable(
+  'app_user',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clinicId: uuid('clinic_id')
+      .notNull()
+      .references(() => clinic.id),
+    email: text('email').notNull(),
+    passwordHash: text('password_hash').notNull(),
+    displayName: text('display_name').notNull(),
+    role: userRoleEnum('role').notNull(),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [unique('app_user_clinic_id_email_key').on(t.clinicId, t.email)],
+);
+
+/**
+ * One row per issued refresh token. `tokenHash` is a SHA-256 of the opaque
+ * token, so the table is useless to an attacker who reads it. `familyId` groups
+ * a login's rotation chain; presenting an already-used row revokes the family.
+ */
+export const refreshToken = pgTable('refresh_token', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => appUser.id, { onDelete: 'cascade' }),
+  familyId: uuid('family_id').notNull(),
+  tokenHash: text('token_hash').notNull().unique(),
+  issuedAt: timestamp('issued_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+});
+
 export const schema = {
   clinic,
   patient,
@@ -314,4 +357,6 @@ export const schema = {
   scheduleVersion,
   auditLog,
   idempotencyRecord,
+  appUser,
+  refreshToken,
 };

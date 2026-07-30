@@ -114,6 +114,29 @@ export interface AuditRepository {
   append(tx: unknown, row: AuditWrite): Promise<void>;
 }
 
+/**
+ * Booking conflict rate. Counted in the use case rather than the HTTP layer
+ * because only the use case can tell a genuine slot fight from a 409 raised by
+ * an idempotency-key mistake.
+ */
+export interface BookingMetrics {
+  bookingAttempted(): void;
+  bookingConflicted(): void;
+}
+
+/**
+ * Announces that a clinic-day changed, so open grids can refresh without
+ * waiting for their next poll. Called after the transaction commits — never
+ * inside it, or a rollback would still have told everyone the day changed.
+ */
+export interface ScheduleEventPublisher {
+  publish(event: {
+    clinicId: string;
+    date: string;
+    version: number;
+  }): Promise<void>;
+}
+
 export interface IdempotencyRepository {
   find(clinicId: string, key: string): Promise<IdempotencyRead | null>;
   save(row: IdempotencyWrite): Promise<void>;

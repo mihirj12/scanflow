@@ -43,6 +43,14 @@ export interface SegmentRepository {
   ): Promise<readonly SegmentRecord[]>;
 }
 
+/**
+ * Observability port. The use case reports how long the pure engine took; where
+ * that number goes is the adapter's business.
+ */
+export interface SuggestionMetrics {
+  suggestionComputed(milliseconds: number): void;
+}
+
 export interface ScheduleVersionRepository {
   /**
    * Returns the current version, creating the row at version 1 if the day has

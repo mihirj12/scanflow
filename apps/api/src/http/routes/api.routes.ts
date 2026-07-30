@@ -12,6 +12,8 @@ import {
   getScheduleQuerySchema,
   type ListAppointmentsQuery,
   listAppointmentsQuerySchema,
+  type ListAuditQuery,
+  listAuditQuerySchema,
   type ListPatientsQuery,
   listPatientsQuerySchema,
   type RescheduleAppointmentBody,
@@ -22,12 +24,24 @@ import {
 import { Router } from 'express';
 
 import type { AppContainer } from '../../container.js';
+import { streamSchedule } from '../controllers/schedule-stream.controller.js';
+import { authenticate, requireRole } from '../middleware/authenticate.js';
 import { idempotency } from '../middleware/idempotency.js';
 import { validate } from '../middleware/validate.js';
+
+import { buildAuthRouter } from './auth.routes.js';
 
 function routeParam(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) return value[0];
   return value;
+}
+
+/**
+ * The actor for the audit trail. Null is unreachable below the guard, but the
+ * type stays nullable because `audit_log` also records system-initiated rows.
+ */
+function actorOf(req: { auth?: { userId: string } }): string | null {
+  return req.auth?.userId ?? null;
 }
 
 export function buildApiRouter(container: AppContainer): Router {
@@ -38,10 +52,74 @@ export function buildApiRouter(container: AppContainer): Router {
     res.json({ status: 'ok' });
   });
 
-  api.get('/ready', async (_req, res, next) => {
+  /**
+   * Readiness, unlike liveness, touches the database. A failure is a 503 rather
+   * than a 500: the process is fine, it is the dependency that is not, and that
+   * is the distinction a load balancer acts on.
+   */
+  api.get('/ready', async (_req, res) => {
     try {
-      await container.repos.clinics.getById(clinicId);
+      const clinic = await container.repos.clinics.getById(clinicId);
+      if (clinic === null) throw new Error('configured clinic is missing');
       res.json({ status: 'ready' });
+    } catch (error) {
+      container.log.warn({ err: error }, 'readiness check failed');
+      res.status(503).type('application/problem+json').json({
+        type: 'https://scanflow.local/problems/not-ready',
+        title: 'Not ready',
+        status: 503,
+        detail: 'The database is not reachable. Retry shortly.',
+      });
+    }
+  });
+
+  // Public: signing in is how you stop being unauthenticated.
+  api.use('/auth', buildAuthRouter(container));
+
+  /**
+   * Everything below this line requires an access token. Mounting the guard on
+   * the router — rather than listing it per route — means a new endpoint is
+   * protected by default, and forgetting it is not a possible mistake.
+   */
+  api.use(
+    authenticate({ accessTokens: container.auth.accessTokens, clinicId }),
+  );
+
+  api.get(
+    '/schedule/stream',
+    streamSchedule({ events: container.events, clinicId }),
+  );
+
+  api.get(
+    '/audit',
+    requireRole('ADMIN'),
+    validate(listAuditQuerySchema, 'query'),
+    async (req, res, next) => {
+      try {
+        const query = req.query as unknown as ListAuditQuery;
+        res.json(
+          await container.useCases.listAudit({
+            clinicId,
+            limit: query.limit,
+            ...(query.entityId === undefined
+              ? {}
+              : { entityId: query.entityId }),
+          }),
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  api.get('/metrics', requireRole('ADMIN'), async (req, res, next) => {
+    try {
+      const date = req.query['date'];
+      const utilisation =
+        typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
+          ? await container.useCases.getDayUtilisation({ clinicId, date })
+          : null;
+      res.json({ ...container.metrics.snapshot(), utilisation });
     } catch (error) {
       next(error);
     }
@@ -91,7 +169,7 @@ export function buildApiRouter(container: AppContainer): Router {
         const payload = req.body as BookAppointmentBody;
         const body = await container.useCases.bookAppointment({
           clinicId,
-          actorId: null,
+          actorId: actorOf(req),
           ...payload,
         });
         const save = res.locals['saveIdempotency'] as
@@ -220,7 +298,7 @@ export function buildApiRouter(container: AppContainer): Router {
         const body = await container.useCases.rescheduleAppointment({
           clinicId,
           appointmentId: id,
-          actorId: null,
+          actorId: actorOf(req),
           ...payload,
         });
         const save = res.locals['saveIdempotency'] as
@@ -261,7 +339,7 @@ export function buildApiRouter(container: AppContainer): Router {
             clinicId,
             appointmentId: id,
             to,
-            actorId: null,
+            actorId: actorOf(req),
             ...(cancelBody.reason === undefined
               ? {}
               : { reason: cancelBody.reason }),
@@ -453,15 +531,14 @@ export function buildApiRouter(container: AppContainer): Router {
 
   api.post(
     '/appointment-templates',
+    requireRole('ADMIN'),
     validate(createAppointmentTemplateBodySchema),
     async (req, res, next) => {
       try {
-        // ADMIN-only in M6. Until auth exists, the endpoint is open and the
-        // gap is recorded in OPEN-QUESTIONS.
         const payload = req.body as CreateAppointmentTemplateBody;
         const created = await container.repos.templates.create(clinicId, {
           ...payload,
-          createdBy: null,
+          createdBy: actorOf(req),
         });
         res.status(201).json({
           id: created.template.id,

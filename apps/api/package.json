@@ -16,12 +16,16 @@
     "db:seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
     "@scanflow/contracts": "workspace:*",
     "@scanflow/scheduling-core": "workspace:*",
+    "cookie-parser": "^1.4.7",
     "cors": "2.8.6",
     "drizzle-orm": "0.45.2",
     "express": "5.2.1",
     "helmet": "8.3.0",
+    "ioredis": "^5.11.1",
+    "jose": "^6.2.4",
     "luxon": "3.7.2",
     "pino": "10.3.1",
     "pino-http": "11.0.0",
@@ -32,6 +36,7 @@
   "devDependencies": {
     "@scanflow/config": "workspace:*",
     "@testcontainers/postgresql": "12.0.4",
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "2.8.19",
     "@types/express": "5.0.6",
     "@types/luxon": "3.7.2",

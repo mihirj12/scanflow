@@ -2,19 +2,27 @@ import { loadConfig } from './config.js';
 import { createContainer } from './container.js';
 import { createApp } from './http/app.js';
 
-function main(): void {
+async function main(): Promise<void> {
   const config = loadConfig();
-  const container = createContainer(config);
-  const { app, log } = createApp(container);
+  const container = await createContainer(config);
+  const { app, log } = createApp(container, { log: container.log });
 
-  app.listen(config.PORT, () => {
+  const server = app.listen(config.PORT, () => {
     log.info({ port: config.PORT }, 'ScanFlow API listening');
   });
+
+  // Drain the Redis connections on shutdown, or the process hangs on SIGTERM.
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(signal, () => {
+      log.info({ signal }, 'shutting down');
+      server.close(() => {
+        void container.events.close();
+      });
+    });
+  }
 }
 
-try {
-  main();
-} catch (error: unknown) {
+main().catch((error: unknown) => {
   console.error(error);
   process.exit(1);
-}
+});

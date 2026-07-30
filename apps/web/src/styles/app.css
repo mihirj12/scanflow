@@ -75,6 +75,47 @@ body {
   min-width: 9rem;
 }
 
+.app__user {
+  margin: 0 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.app__role {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--space-4);
+}
+
+.login__card {
+  width: min(22rem, 100%);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: var(--space-4);
+}
+
+.login__title {
+  margin: 0;
+  font-size: 20px;
+}
+
+.login__subtitle {
+  margin: var(--space-1) 0 var(--space-4);
+  color: var(--text-muted);
+}
+
+.login__card .btn {
+  width: 100%;
+}
+
 .app__main {
   flex: 1;
   min-height: 0;

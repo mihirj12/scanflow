@@ -16,6 +16,15 @@ import {
   templateStep,
 } from '../src/infra/db/schema.js';
 
+import {
+  DEFAULT_SEED_PASSWORD,
+  DEMO_BUSY_DATE,
+  DEMO_NORMAL_DATE,
+  SEED_USERS,
+  seedDemoDays,
+  seedUsers,
+} from './seed-demo-days.js';
+
 /** Stable id so local .env and CI share the same CLINIC_ID. */
 export const SEED_CLINIC_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -27,14 +36,14 @@ export const SEED_PATIENT_IDENTIFIERS = {
   phone: '+10000000000',
 } as const;
 
-const SERVICE = {
+export const SERVICE = {
   CONSULT: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   INJECT: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   SCAN: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
   PROCESS: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
 } as const;
 
-const RESOURCE = {
+export const RESOURCE = {
   DOCTOR: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
   NMT: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
   SCAN: '99999999-9999-4999-8999-999999999999',
@@ -384,8 +393,21 @@ export async function seedDatabase(databaseUrl: string): Promise<void> {
       );
     }
 
+    const password = process.env['SEED_USER_PASSWORD'] ?? DEFAULT_SEED_PASSWORD;
+    const users = await seedUsers(db, SEED_CLINIC_ID, password);
+    const days = await seedDemoDays(db, {
+      clinicId: SEED_CLINIC_ID,
+      services: SERVICE,
+      resources: RESOURCE,
+    });
+
     process.stdout.write(
-      `seed complete\n  CLINIC_ID=${SEED_CLINIC_ID}\n  resources=3 serviceTypes=4 presets=6\n`,
+      `seed complete\n` +
+        `  CLINIC_ID=${SEED_CLINIC_ID}\n` +
+        `  resources=3 serviceTypes=4 presets=6\n` +
+        `  users created=${String(users)} (login with ${SEED_USERS[0].email})\n` +
+        `  demo days: ${DEMO_NORMAL_DATE} normal (+${String(days.normal)}), ` +
+        `${DEMO_BUSY_DATE} near-full (+${String(days.busy)})\n`,
     );
   } finally {
     await closeDb(db);

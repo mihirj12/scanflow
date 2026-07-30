@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { type Express } from 'express';
 import helmet from 'helmet';
@@ -21,11 +24,31 @@ export function createApp(
 
   app.disable('x-powered-by');
   app.use(helmet());
-  app.use(cors({ origin: container.config.CORS_ORIGIN }));
+  app.use(
+    cors({
+      origin: container.config.CORS_ORIGIN,
+      // The refresh cookie only travels if the browser is told to send it.
+      credentials: true,
+    }),
+  );
   app.use(express.json({ limit: '1mb' }));
+  app.use(cookieParser());
   app.use(
     pinoHttp({
       logger: log,
+      /**
+       * One id per request, echoed back so a user reporting a problem can quote
+       * the header and a support engineer can find every line for that request.
+       */
+      genReqId(req, res) {
+        const inbound = req.headers['x-request-id'];
+        const id =
+          typeof inbound === 'string' && inbound !== ''
+            ? inbound
+            : randomUUID();
+        res.setHeader('x-request-id', id);
+        return id;
+      },
       // Never log request bodies — they can contain patient identifiers.
       serializers: {
         req(req: { method?: string; url?: string }) {

@@ -19,6 +19,28 @@ const envSchema = z.object({
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
+  /**
+   * HS256 signing key for access tokens. No default: a fallback secret is the
+   * kind of thing that reaches production and stays there.
+   */
+  JWT_SECRET: z.string().min(32),
+  ACCESS_TOKEN_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(3600)
+    .default(900),
+  REFRESH_TOKEN_TTL_DAYS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(90)
+    .default(30),
+  /**
+   * Absent means no fan-out: the API still works and the UI falls back to
+   * polling, so a Redis outage degrades liveness rather than availability.
+   */
+  REDIS_URL: z.string().optional(),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;
