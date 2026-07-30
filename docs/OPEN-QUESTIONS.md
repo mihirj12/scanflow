@@ -155,6 +155,12 @@ Every table is tenant-scoped, but the process serves one clinic configured by
 `CLINIC_ID`. Multi-clinic routing is out of scope; the seed writes a stable id
 that `.env.example` documents.
 
+### D24 — Schedule response includes `timezone` for the time gutter
+
+`GET /schedule` returns day bounds as UTC ISO instants. The grid's time labels
+must be clinic-local, so M3 added `timezone` (IANA) to `GetScheduleResponse`
+rather than hardcoding Asia/Kolkata in the web app.
+
 ### D9 — Local verification of the database constraints was deferred to CI
 
 Docker is not installed on the development machine used for M0 (no Docker

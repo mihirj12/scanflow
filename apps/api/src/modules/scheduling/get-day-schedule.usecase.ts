@@ -61,6 +61,7 @@ export function createGetDayScheduleUseCase(deps: GetDayScheduleDeps) {
       date: cmd.date,
       scheduleVersion,
       slotMinutes: clinic.grid.slotMinutes,
+      timezone: clinic.grid.timezone,
       dayStart: day.start.toUTC().toISO() ?? day.start.toJSDate().toISOString(),
       dayEnd: day.end.toUTC().toISO() ?? day.end.toJSDate().toISOString(),
       resources: resources.map((r) => ({
