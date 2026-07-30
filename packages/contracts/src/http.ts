@@ -227,6 +227,10 @@ export const listAppointmentsResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 
+export type ListAppointmentsResponse = z.infer<
+  typeof listAppointmentsResponseSchema
+>;
+
 // ---------------------------------------------------------------------------
 // Patients, resources, service types, templates
 // ---------------------------------------------------------------------------
