@@ -1,0 +1,17 @@
+---
+description: React conventions and the visual language of the schedule grid.
+globs: apps/web/**
+alwaysApply: false
+---
+
+Follow `.claude/skills/ui-component/SKILL.md`.
+
+- Components render; derived state and data fetching live in hooks. No clinical
+  logic in a component.
+- Forms use the Zod schema from `packages/contracts`. Never redeclare a shape.
+- Use the custom properties in `src/styles/tokens.css`. Do not introduce a new hex
+  value in a component.
+- 36 rows at 28px must fit on a 1080p screen without scrolling. If it does not
+  fit, remove chrome — do not shrink the row.
+- Every interactive element is keyboard-operable with a visible focus ring.
+  Skeletons, not spinners. Empty states say what to do next.

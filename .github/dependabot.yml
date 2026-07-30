@@ -1,0 +1,46 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    # Grouped so a week's updates arrive as one reviewable PR rather than
+    # fifteen. The toolchain groups are separated because a lint or build tool
+    # bump is a different kind of risk from a runtime dependency bump.
+    groups:
+      runtime:
+        patterns: ['*']
+        exclude-patterns:
+          - 'eslint*'
+          - '@eslint/*'
+          - 'typescript-eslint'
+          - 'prettier*'
+          - 'vitest'
+          - '@vitest/*'
+          - 'turbo'
+          - 'typescript'
+      toolchain:
+        patterns:
+          - 'eslint*'
+          - '@eslint/*'
+          - 'typescript-eslint'
+          - 'prettier*'
+          - 'vitest'
+          - '@vitest/*'
+          - 'turbo'
+          - 'typescript'
+    commit-message:
+      prefix: 'chore(repo)'
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: 'chore(ci)'

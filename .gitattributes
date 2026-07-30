@@ -1,0 +1,12 @@
+# Normalise line endings to LF in the repository and in the working tree on every
+# platform. Without this, Git rewrites checkouts to CRLF on Windows and Prettier's
+# `endOfLine: "lf"` then reports every file as unformatted — so `pnpm format:check`
+# would pass in CI and fail locally.
+* text=auto eol=lf
+
+# Shell scripts must be LF regardless of anything else; the husky hooks are run by
+# sh, which does not tolerate a trailing CR.
+*.sh text eol=lf
+.husky/* text eol=lf
+
+pnpm-lock.yaml linguist-generated=true -diff

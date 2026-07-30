@@ -1,0 +1,9 @@
+{
+  "extends": "@scanflow/config/tsconfig/node.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": ".",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src/**/*", "scripts/**/*"]
+}

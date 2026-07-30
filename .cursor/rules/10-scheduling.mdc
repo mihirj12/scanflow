@@ -1,0 +1,16 @@
+---
+description: The scheduling engine is pure and has nine proven invariants.
+globs: packages/scheduling-core/**
+alwaysApply: false
+---
+
+Before changing anything here, read `.claude/skills/scheduling-invariants/SKILL.md`
+and follow it exactly.
+
+- Nine properties must hold, verified by fast-check at 1,000+ runs each.
+- Zero dependencies. `package.json` `dependencies` must stay `{}`.
+- No `async`, no `Promise`, no `Math.random`, no `Date.now`, no clock time at all.
+  `pnpm lint` runs `scripts/check-purity.mjs`, which fails the build on any of
+  these.
+- Add the property test first and watch it fail. Then implement.
+- Re-run `pnpm bench` after any engine change; p95 must stay under 50 ms.

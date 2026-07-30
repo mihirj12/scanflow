@@ -1,0 +1,7 @@
+pnpm lint-staged
+
+# ESLint runs per package, not from the root, because type-aware rules need each
+# package's own tsconfig. That means a root-level `eslint <staged files>` would
+# silently skip everything under apps/ and packages/, so the whole workspace is
+# linted instead. Turbo caches it, so an unrelated change is near-instant.
+pnpm lint
