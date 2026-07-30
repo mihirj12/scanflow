@@ -103,7 +103,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - run: pnpm test:integration
+      - name: Run integration tests
+        run: pnpm test:integration
+        env:
+          # Ryuk can hang on some runners; the suite tears the container down itself.
+          TESTCONTAINERS_RYUK_DISABLED: 'true'
 
   bench:
     name: bench

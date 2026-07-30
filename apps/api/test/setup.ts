@@ -63,5 +63,8 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
+  // Close the pool so Vitest can exit; an open postgres.js client keeps the
+  // event loop alive and hangs CI for the full job timeout.
+  await appContainer.db.$client.end({ timeout: 5 });
   await pgContainer.stop();
-});
+}, 60_000);
