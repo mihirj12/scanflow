@@ -41,7 +41,7 @@ C4Container
   Person(user, "Clinic staff")
 
   Container_Boundary(sf, "ScanFlow") {
-    Container(web, "Web app", "React 18, Vite, TanStack Query", "Schedule grid, booking wizard, command palette")
+    Container(web, "Web app", "React 19, Vite, TanStack Query", "Schedule grid, booking wizard, command palette")
     Container(api, "API", "Node 22, Express 5, TypeScript", "REST under /api/v1, RFC 9457 errors, composition root")
     Container(core, "scheduling-core", "Pure TypeScript, zero dependencies", "Ranked candidate placements for a chain of steps")
     Container(contracts, "contracts", "Zod schemas", "Request/response shapes and chain validation, shared by web and api")

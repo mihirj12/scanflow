@@ -31,6 +31,13 @@ updates:
           - '@vitest/*'
           - 'turbo'
           - 'typescript'
+    ignore:
+      # typescript-eslint's peer range caps TypeScript below 6.1, so a major bump
+      # takes the type-aware lint rules offline and fails `lint` while the other
+      # five checks stay green — see D4. Remove this once typescript-eslint
+      # supports the next major.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
     commit-message:
       prefix: 'chore(repo)'
 

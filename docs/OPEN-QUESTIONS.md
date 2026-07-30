@@ -111,11 +111,17 @@ does not declare support for ESLint 10, which is current. `eslint-plugin-import-
 is the maintained fork, supports ESLint 10, and provides the same rule as
 `import-x/no-restricted-paths`. The architecture boundary is enforced identically.
 
-### D6 — React 18, not 19
+### D6 — React 19, not the React 18 the spec names
 
-Spec 3.1 says React 18, so React 18.3.1 is installed, though React 19.2 is
-current. Flagged because a reviewer will notice, and it is a one-line change if the
-answer is "use 19".
+Spec 3.1 says React 18, and M0 shipped 18.3.1 to match it. The question was then
+asked directly and the answer was "use 19", so Dependabot's 19.2.8 bump was taken.
+
+Absorbing a React major costs nothing while `apps/web` is still a shell — this is
+the cheapest the migration will ever be, and it means M3 onward is written against
+19 rather than migrated to it afterwards. Nothing in the tree depended on 18-only
+behaviour: the entry point already used `createRoot` from `react-dom/client`, and
+format, lint, typecheck, the 26 unit tests and the build were all green on 19
+before the merge.
 
 ### D7 — `pnpm test:integration` currently does nothing
 
@@ -144,8 +150,12 @@ Desktop, no WSL2), so `docker compose up`, `pnpm db:migrate` against a live
 Postgres, and the two `psql` exclusion-constraint checks in the M0 acceptance list
 have **not** been run locally. The CI workflow runs the migration against a real
 Postgres 16 service container and asserts SQLSTATE `23P01` for both the resource
-and the patient constraint, so these are verified — by CI, not by hand. See the
-verification table in the M0 pull request.
+and the patient constraint, so these are verified — by CI, not by hand. The
+evidence is attached to the M0 acceptance-criteria issues as CI output.
+
+One criterion cannot honestly be closed this way and is still open: a service
+container is not `docker compose up`, so the compose file, the `btree_gist` init
+script and the Redis service remain unverified until Docker Desktop is installed.
 
 ### D10 — `audit_log.clinic_id` has no foreign key
 
@@ -162,3 +172,24 @@ as a specification and should not be reflowed.
 
 `apps/api` joins in M2 and `apps/web` in M3, when they have tests. Listing a
 directory with no test files makes the runner fail rather than pass vacuously.
+
+### D13 — The repository is public, where spec 14.1 says private
+
+Spec 14.1 asks for a private repository. It also asks for secret scanning and push
+protection, and 14.2 asks for a ruleset on `main`. On GitHub Free none of those three
+exist for a private repository: the rulesets endpoint answers `403 Upgrade to GitHub
+Pro or make this repository public`, and secret scanning answers `422 not available`.
+Paying for Pro would buy the ruleset and still not secret scanning, which needs
+Advanced Security.
+
+Public was chosen over giving up the merge gate, because the gate is what 14.2 is
+really protecting. `main` now requires a pull request, six passing checks, a branch
+up to date with `main`, and resolved conversations, and it blocks force pushes and
+deletion — with no bypass actors, including its owner. Secret scanning and push
+protection are on.
+
+The trade is safe here for the reason the README states out loud: all seed and test
+data is synthetic and no PHI is in the repository or its history. That was audited
+before the switch — the only tracked env file is `.env.example`, and its credentials
+are the local container's `scanflow:scanflow`. Were this repository ever to hold real
+data, private plus Advanced Security would be the only acceptable configuration.

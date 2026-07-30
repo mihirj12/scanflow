@@ -61,7 +61,7 @@ appointment booked in February.
 | `packages/contracts`       | Zod schemas and inferred types, shared by both apps.                                  |
 | `packages/config`          | Shared tsconfig, ESLint, Prettier.                                                    |
 | `apps/api`                 | Express 5 API, Drizzle, hand-written SQL migrations.                                  |
-| `apps/web`                 | React 18 + Vite. Schedule grid and booking wizard.                                    |
+| `apps/web`                 | React 19 + Vite. Schedule grid and booking wizard.                                    |
 | `docs/adr`                 | Four decision records. Read these to understand the _why_.                            |
 | `docs/OPEN-QUESTIONS.md`   | Every judgement call and deviation, with reasons.                                     |
 | `.claude/skills`           | Six skills: domain, engine invariants, endpoint recipe, migrations, UI, PR checklist. |
