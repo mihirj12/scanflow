@@ -67,6 +67,8 @@ export {
   type CreatePatientBody,
   type GetScheduleQuery,
   type GetScheduleResponse,
+  type ScheduleAppointment,
+  type ScheduleSegment,
   type Instant,
   type ListAppointmentsQuery,
   type ListPatientsQuery,

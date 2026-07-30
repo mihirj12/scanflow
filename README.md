@@ -26,16 +26,14 @@ application level.
 ## Status
 
 Phases **M0 — Foundations**, **M1 — Scheduling engine**, and **M2 — API** are
-complete. The engine proposes ranked placements; the Express API books them
-transactionally against Postgres exclusion constraints, with Testcontainers
-covering the concurrent race.
+complete. **M3 — Schedule grid** is in progress.
 
 | Phase  | Deliverable                                              | State       |
 | ------ | -------------------------------------------------------- | ----------- |
 | M0     | Monorepo, tooling, CI, Compose, schema, migrations, ADRs | Complete    |
 | M1     | Scheduling engine + property tests                       | Complete    |
 | M2     | Express API, repositories, integration tests             | Complete    |
-| **M3** | **Read-only schedule grid**                              | Next        |
+| **M3** | **Read-only schedule grid**                              | In progress |
 | M4     | Suggestions, booking wizard, conflict recovery           | Not started |
 | M5     | Management UI: drawer, kebab menu, command palette       | Not started |
 | M6     | Auth, RBAC, audit, SSE, seed polish                      | Not started |

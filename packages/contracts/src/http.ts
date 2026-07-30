@@ -100,6 +100,8 @@ export const getScheduleResponseSchema = z.object({
   date: clinicDateSchema,
   scheduleVersion: z.number().int().positive(),
   slotMinutes: z.number().int().positive(),
+  /** IANA timezone of the clinic; used to label the time gutter. */
+  timezone: z.string().min(1),
   dayStart: instantSchema,
   dayEnd: instantSchema,
   resources: z.array(scheduleResourceSchema),
@@ -108,6 +110,8 @@ export const getScheduleResponseSchema = z.object({
 });
 
 export type GetScheduleResponse = z.infer<typeof getScheduleResponseSchema>;
+export type ScheduleAppointment = z.infer<typeof scheduleAppointmentSchema>;
+export type ScheduleSegment = z.infer<typeof scheduleSegmentSchema>;
 
 // ---------------------------------------------------------------------------
 // Suggestions and booking

@@ -39,6 +39,7 @@ body {
   gap: var(--space-3);
   padding: var(--space-2) var(--space-4);
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .app__title {
@@ -48,13 +49,178 @@ body {
   letter-spacing: -0.01em;
 }
 
-.app__subtitle {
-  margin: 0;
+.app__date {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.app__date-label {
   color: var(--text-muted);
+}
+
+.app__date input {
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: 2px 6px;
+}
+
+.app__live {
+  margin: 0;
+  color: var(--text-faint);
+  min-width: 9rem;
 }
 
 .app__main {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  /* Density constraint: the grid itself must fit; avoid scrolling the chrome. */
+  overflow: hidden;
+  padding: var(--space-2) var(--space-4) var(--space-3);
+}
+
+.app__empty,
+.app__error {
+  margin: var(--space-4) 0;
+  color: var(--text-muted);
+}
+
+.app__error {
+  color: var(--seg-doctor);
+}
+
+.schedule-skeleton {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.schedule-skeleton__row {
+  height: var(--slot-height);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+}
+
+.schedule-grid {
+  --lane-count: 4;
+  --slot-count: 36;
+  display: grid;
+  grid-template-columns: var(--time-gutter-width) repeat(
+      var(--lane-count),
+      minmax(0, 1fr)
+    );
+  grid-template-rows: var(--grid-header-height) repeat(
+      var(--slot-count),
+      var(--slot-height)
+    );
+  width: 100%;
+  height: calc(
+    var(--grid-header-height) + var(--slot-count) * var(--slot-height)
+  );
+  border: 1px solid var(--border);
+  background: var(--surface);
+  position: relative;
+  font-size: var(--font-size-grid);
+}
+
+.schedule-grid__corner,
+.schedule-grid__lane-header {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-2);
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background: var(--surface-sunken);
+  font-weight: 600;
+  grid-row: 1;
+}
+
+.schedule-grid__corner {
+  grid-column: 1;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.schedule-grid__lane-header {
+  justify-content: center;
+}
+
+.schedule-grid__time {
+  grid-column: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 2px var(--space-2) 0 0;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.schedule-grid__cell {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--slot-available);
+}
+
+.schedule-segment {
+  z-index: 1;
+  margin: 1px 2px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  font: inherit;
+  line-height: 1.2;
+}
+
+.schedule-segment--doctor {
+  background: var(--seg-doctor);
+}
+
+.schedule-segment--nmt {
+  background: var(--seg-nmt);
+}
+
+.schedule-segment--scan {
+  background: var(--seg-scan);
+}
+
+.schedule-segment--patient {
+  background: var(--seg-patient);
+}
+
+.schedule-segment--delay {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--seg-patient-wash),
+    var(--seg-patient-wash) 4px,
+    #d4d4d8 4px,
+    #d4d4d8 8px
+  );
+  color: var(--seg-patient);
+  border: 1px dashed var(--seg-patient);
+}
+
+.schedule-segment--held {
+  opacity: var(--held-opacity);
+  border-style: dashed;
+}
+
+.schedule-segment--lit {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  z-index: 2;
+}
+
+.schedule-segment__label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
