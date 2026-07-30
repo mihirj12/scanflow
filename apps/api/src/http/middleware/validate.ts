@@ -8,6 +8,10 @@ type RequestSlot = 'body' | 'query' | 'params';
 /**
  * Zod → 400 problem. Controllers stay free of validation logic; they receive
  * already-parsed values on `req.body` / `req.query` / `req.params`.
+ *
+ * Express 5 exposes `query` (and sometimes `params`) as getters derived from the
+ * URL. A plain assignment throws, which surfaces as a 500 — so we redefine the
+ * property with the parsed value instead.
  */
 export function validate<T>(schema: z.ZodType<T>, slot: RequestSlot = 'body') {
   return (req: Request, _res: Response, next: NextFunction): void => {
@@ -23,7 +27,13 @@ export function validate<T>(schema: z.ZodType<T>, slot: RequestSlot = 'body') {
       );
       return;
     }
-    (req as Request & Record<RequestSlot, T>)[slot] = parsed.data;
+
+    Object.defineProperty(req, slot, {
+      value: parsed.data,
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
     next();
   };
 }
