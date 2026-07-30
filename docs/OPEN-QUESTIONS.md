@@ -123,25 +123,37 @@ behaviour: the entry point already used `createRoot` from `react-dom/client`, an
 format, lint, typecheck, the 26 unit tests and the build were all green on 19
 before the merge.
 
-### D7 — `pnpm test:integration` currently does nothing
+### D7 — Integration tests live in `apps/api` and need Docker
 
-No package declares that script yet; integration tests arrive with the API in M2.
-The Turbo task and the CI job exist now so that branch protection can require the
-`test:integration` check from the first commit rather than being edited later.
+`pnpm test:integration` runs the Testcontainers suite in `@scanflow/api`. The CI
+job has a Docker daemon; the development machine used for M2 still does not, so
+the suite is verified in CI rather than locally (same arrangement as M0's `db`
+job). Unit tests for the API do not need Docker and run everywhere.
 
-### D8 — What M0 puts in `scheduling-core` and `contracts`
+### D8 — Contracts grew HTTP schemas and chain validation in M2
 
-M0 is specified as "no application logic", but the ground rules also ban
-placeholder files and empty directories. Both packages therefore contain the
-smallest genuinely useful, tested thing that M1 and M2 build directly on:
+M0 shipped enums only. M2 added `parseAppointmentChain` (spec 2.9) and every
+request/response Zod schema the API and the future wizard share. The engine
+types (`Candidate`, `EngineStep`, …) stay in `scheduling-core` in slot units;
+contracts speak minutes and ISO instants.
 
-- `scheduling-core` — the slot bitmask primitives (`slotRange`, `isFree`,
-  `occupy`) given verbatim in spec 4.2, with unit tests.
-- `contracts` — the four enum label tuples from spec 2.11, with the Zod schemas,
-  TypeScript unions, and Drizzle `pgEnum` all derived from them.
+### D21 — `POST /appointment-templates` is open until M6 auth
 
-Nothing else from M1 or M2 is scaffolded. The `Candidate` / `EngineStep` /
-`PlacementRequest` API is deliberately absent.
+Spec 5.3 marks template creation ADMIN-only. There is no auth layer yet (M6), so
+the endpoint is reachable without a role check. Documented rather than stubbing
+a fake admin gate that would have to be ripped out.
+
+### D22 — Idempotency lives in its own table (migration 0001)
+
+Spec 5.3 requires `Idempotency-Key` replay. No store existed in 0000, so 0001
+adds `idempotency_record` keyed by `(clinic_id, key)` with a request hash that
+409s when the same key is reused with a different body.
+
+### D23 — Single-clinic process via `CLINIC_ID` env
+
+Every table is tenant-scoped, but the process serves one clinic configured by
+`CLINIC_ID`. Multi-clinic routing is out of scope; the seed writes a stable id
+that `.env.example` documents.
 
 ### D9 — Local verification of the database constraints was deferred to CI
 

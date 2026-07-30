@@ -22,6 +22,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@scanflow/config": "workspace:*"
+    "@scanflow/config": "workspace:*",
+    "vitest": "4.1.10"
   }
 }

@@ -1,7 +1,7 @@
 import { nodeConfig } from '@scanflow/config/eslint/node';
 
 export default [
-  { ignores: ['dist/**', 'coverage/**'] },
+  { ignores: ['dist/**', 'coverage/**', 'test/**'] },
   ...nodeConfig,
   {
     rules: {
@@ -51,6 +51,22 @@ export default [
         },
       ],
     },
+  },
+  {
+    // HTTP is the only layer allowed to know about Express. The named-as-default
+    // warnings on express/pino are noise — both packages export a callable
+    // default that is the idiomatic import.
+    files: ['src/http/**/*.ts'],
+    rules: {
+      'no-restricted-imports': 'off',
+      'import-x/no-named-as-default': 'off',
+      'import-x/no-named-as-default-member': 'off',
+    },
+  },
+  {
+    // Boot and seed scripts report failures before a logger exists.
+    files: ['src/main.ts', 'scripts/**/*.ts'],
+    rules: { 'no-console': 'off', '@typescript-eslint/require-await': 'off' },
   },
   {
     // The composition root is the one place allowed to reach across every layer;
