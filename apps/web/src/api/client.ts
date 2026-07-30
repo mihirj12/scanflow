@@ -1,12 +1,15 @@
 import type {
+  AppointmentDetail,
   AppointmentTemplateDetail,
   BookAppointmentBody,
   BookAppointmentResponse,
   CandidateDto,
   CreatePatientBody,
   GetScheduleResponse,
+  ListAppointmentsResponse,
   PatientDto,
   ProblemDetails,
+  RescheduleAppointmentBody,
   ResourceDto,
   ServiceTypeDto,
   SuggestAppointmentsBody,
@@ -134,6 +137,55 @@ export function bookAppointment(
   idempotencyKey: string,
 ): Promise<BookAppointmentResponse> {
   return apiPost<BookAppointmentResponse>('/api/v1/appointments', body, {
+    idempotencyKey,
+  });
+}
+
+export function fetchAppointment(id: string): Promise<AppointmentDetail> {
+  return apiGet<AppointmentDetail>(`/api/v1/appointments/${id}`);
+}
+
+export function listAppointments(params: {
+  q?: string;
+  date?: string;
+  limit?: number;
+}): Promise<ListAppointmentsResponse> {
+  const search = new URLSearchParams();
+  if (params.q !== undefined && params.q.trim() !== '') {
+    search.set('q', params.q.trim());
+  }
+  if (params.date !== undefined) search.set('date', params.date);
+  search.set('limit', String(params.limit ?? 20));
+  return apiGet<ListAppointmentsResponse>(
+    `/api/v1/appointments?${search.toString()}`,
+  );
+}
+
+export function fetchPatient(id: string): Promise<PatientDto> {
+  return apiGet<PatientDto>(`/api/v1/patients/${id}`);
+}
+
+export type StatusActionPath =
+  'cancel' | 'check-in' | 'no-show' | 'start' | 'complete';
+
+export function postAppointmentStatus(
+  appointmentId: string,
+  path: StatusActionPath,
+  body: { reason?: string } = {},
+): Promise<{
+  appointmentId: string;
+  status: string;
+  scheduleVersion: number;
+}> {
+  return apiPost(`/api/v1/appointments/${appointmentId}/${path}`, body);
+}
+
+export function rescheduleAppointment(
+  appointmentId: string,
+  body: RescheduleAppointmentBody,
+  idempotencyKey: string,
+): Promise<BookAppointmentResponse> {
+  return apiPost(`/api/v1/appointments/${appointmentId}/reschedule`, body, {
     idempotencyKey,
   });
 }

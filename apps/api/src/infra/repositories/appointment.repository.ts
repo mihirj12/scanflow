@@ -59,6 +59,7 @@ export function createPatientRepository(db: Db): PatientRepository {
               or(
                 ilike(patient.mrn, `%${q}%`),
                 ilike(patient.fullName, `%${q}%`),
+                ilike(patient.phone, `%${q}%`),
               ),
             );
       const rows = await db.select().from(patient).where(filters).limit(limit);
@@ -206,13 +207,35 @@ export function createAppointmentRepository(db: Db): AppointmentRepository {
         conditions.push(eq(appointment.status, args.status));
       }
 
-      const rows = await db
-        .select()
-        .from(appointment)
-        .where(and(...conditions))
-        .orderBy(appointment.createdAt)
-        .limit(args.limit + 1);
+      const q = args.q?.trim();
+      let headerRows;
+      if (q !== undefined && q !== '') {
+        headerRows = await db
+          .select({ appointment })
+          .from(appointment)
+          .innerJoin(patient, eq(patient.id, appointment.patientId))
+          .where(
+            and(
+              ...conditions,
+              or(
+                ilike(patient.mrn, `%${q}%`),
+                ilike(patient.fullName, `%${q}%`),
+                ilike(patient.phone, `%${q}%`),
+              ),
+            ),
+          )
+          .orderBy(appointment.createdAt)
+          .limit(args.limit + 1);
+      } else {
+        headerRows = await db
+          .select({ appointment })
+          .from(appointment)
+          .where(and(...conditions))
+          .orderBy(appointment.createdAt)
+          .limit(args.limit + 1);
+      }
 
+      const rows = headerRows.map((row) => row.appointment);
       const page = rows.slice(0, args.limit);
       const items = [];
       for (const header of page) {
