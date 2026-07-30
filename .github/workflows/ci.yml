@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -94,7 +95,6 @@ jobs:
     name: test:integration
     runs-on: ubuntu-latest
     # Testcontainers needs a Docker daemon; GitHub-hosted Ubuntu runners have one.
-    # No package declares this script until M2, so today it is a successful no-op.
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -104,7 +104,12 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - run: pnpm test:integration
+      - name: Run integration tests
+        # Bypass Turbo so nested tooling cannot contend on the pnpm store lock.
+        run: pnpm --filter @scanflow/api test:integration
+        env:
+          # Ryuk can hang on some runners; the suite tears the container down itself.
+          TESTCONTAINERS_RYUK_DISABLED: 'true'
 
   bench:
     name: bench
