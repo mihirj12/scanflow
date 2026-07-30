@@ -14,6 +14,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "turbo run test:integration",
+    "bench": "turbo run bench",
     "dev": "turbo run dev",
     "db:migrate": "pnpm --filter @scanflow/api db:migrate",
     "db:verify": "pnpm --filter @scanflow/api db:verify",
