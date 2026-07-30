@@ -1,5 +1,7 @@
 import type { CSSProperties, ReactElement } from 'react';
 
+import type { GhostSegment } from '../booking/ghost-preview';
+
 import type { GridLane, GridSegment } from './build-schedule-view';
 import { useScheduleInteraction } from './use-schedule-interaction';
 
@@ -8,6 +10,8 @@ export interface ScheduleGridProps {
   segments: readonly GridSegment[];
   timeLabels: readonly string[];
   totalSlots: number;
+  /** Translucent overlay for a hovered suggestion — never interactive. */
+  ghostSegments?: readonly GhostSegment[];
 }
 
 export function ScheduleGrid({
@@ -15,6 +19,7 @@ export function ScheduleGrid({
   segments,
   timeLabels,
   totalSlots,
+  ghostSegments = [],
 }: ScheduleGridProps): ReactElement {
   const interaction = useScheduleInteraction(segments);
 
@@ -108,6 +113,32 @@ export function ScheduleGrid({
           >
             <span className="schedule-segment__label">{segment.label}</span>
           </button>
+        );
+      })}
+
+      {ghostSegments.map((ghost) => {
+        const laneIndex = lanes.findIndex((l) => l.key === ghost.laneKey);
+        if (laneIndex < 0) return null;
+        return (
+          <div
+            key={ghost.id}
+            className={[
+              'schedule-segment',
+              'schedule-segment--ghost',
+              ghost.kind === 'DELAY'
+                ? 'schedule-segment--delay'
+                : `schedule-segment--${resourceClass(ghost.resourceType ?? lanes[laneIndex]?.resourceType)}`,
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            style={{
+              gridColumn: laneIndex + 2,
+              gridRow: `${String(ghost.startRow)} / span ${String(ghost.rowSpan)}`,
+            }}
+            aria-hidden="true"
+          >
+            <span className="schedule-segment__label">{ghost.label}</span>
+          </div>
         );
       })}
     </div>

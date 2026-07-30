@@ -33,8 +33,8 @@ complete. **M3 — Schedule grid** is in progress.
 | M0     | Monorepo, tooling, CI, Compose, schema, migrations, ADRs | Complete    |
 | M1     | Scheduling engine + property tests                       | Complete    |
 | M2     | Express API, repositories, integration tests             | Complete    |
-| **M3** | **Read-only schedule grid**                              | In progress |
-| M4     | Suggestions, booking wizard, conflict recovery           | Not started |
+| **M3** | **Read-only schedule grid**                              | Done        |
+| **M4** | **Suggestions, booking wizard, conflict recovery**       | In progress |
 | M5     | Management UI: drawer, kebab menu, command palette       | Not started |
 | M6     | Auth, RBAC, audit, SSE, seed polish                      | Not started |
 
