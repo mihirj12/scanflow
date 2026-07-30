@@ -23,6 +23,11 @@
       "cache": false,
       "outputs": []
     },
+    "bench": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "outputs": []
+    },
     "dev": {
       "cache": false,
       "persistent": true

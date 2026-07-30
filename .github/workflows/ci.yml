@@ -106,6 +106,24 @@ jobs:
       - run: pnpm build
       - run: pnpm test:integration
 
+  bench:
+    name: bench
+    runs-on: ubuntu-latest
+    # The README states a p95 for the engine. A stated performance bound that
+    # nothing enforces decays into a stale claim, so the benchmark exits non-zero
+    # if p95 reaches the 50 ms budget. It measures the 95th percentile of 300
+    # fixed-seed days per case, so an isolated slow moment on a shared runner
+    # cannot fail the build -- only a real regression can.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm bench
+
   build:
     name: build
     runs-on: ubuntu-latest

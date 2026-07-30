@@ -16,10 +16,12 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "node ./scripts/check-purity.mjs && eslint . --max-warnings=0",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bench": "tsc -p tsconfig.build.json && node ./scripts/bench.mjs"
   },
   "dependencies": {},
   "devDependencies": {
-    "@scanflow/config": "workspace:*"
+    "@scanflow/config": "workspace:*",
+    "fast-check": "4.9.0"
   }
 }

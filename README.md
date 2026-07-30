@@ -25,15 +25,16 @@ application level.
 
 ## Status
 
-Phase **M0 — Foundations** is complete. The repository has its monorepo layout,
-toolchain, CI, database schema and migrations, decision records, and agent skills.
-There is no application logic yet: the scheduling engine is M1 and the API is M2.
+Phases **M0 — Foundations** and **M1 — Scheduling engine** are complete. The engine
+in `packages/scheduling-core` places chains of steps against a day's availability
+and returns ranked candidates; it has no dependencies, no `async`, and no I/O.
+There is no API yet — that is M2.
 
 | Phase  | Deliverable                                              | State       |
 | ------ | -------------------------------------------------------- | ----------- |
 | M0     | Monorepo, tooling, CI, Compose, schema, migrations, ADRs | Complete    |
-| **M1** | **Scheduling engine + property tests**                   | Next        |
-| M2     | Express API, repositories, integration tests             | Not started |
+| M1     | Scheduling engine + property tests                       | Complete    |
+| **M2** | **Express API, repositories, integration tests**         | Next        |
 | M3     | Read-only schedule grid                                  | Not started |
 | M4     | Suggestions, booking wizard, conflict recovery           | Not started |
 | M5     | Management UI: drawer, kebab menu, command palette       | Not started |
@@ -51,8 +52,11 @@ pnpm db:migrate           # idempotent — a second run is a no-op
 pnpm db:verify            # asserts the exclusion constraints actually hold
 ```
 
-Then `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`. `pnpm dev` starts
-the web shell; there is nothing to serve from the API until M2.
+Then `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm bench`.
+`pnpm dev` starts the web shell; there is nothing to serve from the API until M2.
+
+Nothing in `packages/scheduling-core` needs Docker — it is pure, so `pnpm test`
+and `pnpm bench` run against no services at all.
 
 ## Architecture in ten lines
 
@@ -95,14 +99,32 @@ that minimise the total span of the visit.
 - The engine returns up to five ranked candidates and never books. A human always
   chooses.
 
-Nine invariants are asserted as `fast-check` properties at 1,000+ runs each:
+Nine invariants are asserted as `fast-check` properties at 1,000 runs each:
 no resource overlap, no patient overlap, gaps within bounds, everything inside the
 day, same-resource honoured, durations preserved, determinism, sorted output, and
-monotonicity. Target: p95 under 50 ms on a worst case of 6 steps, 4 resources per
-type, wide gap windows and 50% occupancy.
+monotonicity. A tenth test measures the generator itself and fails if it drifts
+into producing mostly unschedulable days, because a property suite that asserts
+things about empty arrays proves nothing.
 
-**Benchmark: not yet measured.** The engine lands in M1 and the number goes here
-when it does.
+**Benchmark: p95 of 5.35 ms against a 50 ms budget** — 9× headroom. `pnpm bench`
+measures 300 pseudo-random days per case from a fixed seed, so a regression is a
+regression and not a bad roll. These are the numbers from a GitHub-hosted runner
+rather than from a fast laptop, because a performance claim should be one anybody
+can reproduce:
+
+| Case            | Shape                                                                         | p95     | max     |
+| --------------- | ----------------------------------------------------------------------------- | ------- | ------- |
+| Spec worst case | 6 steps, 4 resources per type, wide gap windows, 50% occupancy                | 2.42 ms | 4.95 ms |
+| Deep dead ends  | as above, but the last step needs a modality only one 95%-booked resource has | 5.35 ms | 8.22 ms |
+
+The second case exists because the first turned out to be the easier one: with a
+pool of four resources the engine usually finds a zero-slack layout immediately and
+the bound prunes everything else. Making the _final_ step scarce forces the search
+to explore to full depth and fail, with no good candidate to tighten the bound
+against — which is the shape that would expose a wrong bound.
+
+CI runs this on every push and fails the build if p95 reaches the budget, so the
+figure above cannot quietly go stale.
 
 ## Why double-booking is impossible
 
