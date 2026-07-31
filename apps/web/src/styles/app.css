@@ -1128,10 +1128,18 @@ body {
 }
 
 .audit-log-panel {
+  position: relative;
+  z-index: 1;
   width: min(720px, 92vw);
   max-height: min(80vh, 640px);
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  border-radius: 2px;
+  box-shadow: 0 8px 32px rgb(24 24 27 / 0.12);
 }
 
 .audit-log-panel__header {
@@ -1168,8 +1176,14 @@ body {
 }
 
 .audit-log-panel__table-wrap {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: var(--space-3) var(--space-4);
+}
+
+.audit-log-panel__table tbody tr:nth-child(even) {
+  background: rgb(0 0 0 / 0.02);
 }
 
 .audit-log-panel__table {

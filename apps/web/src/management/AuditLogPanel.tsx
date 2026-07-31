@@ -62,7 +62,7 @@ export function AuditLogPanel({
         <p className="audit-log-panel__empty">No activity recorded yet.</p>
       ) : null}
 
-      {(audit.data?.items.length ?? 0) > 0 ? (
+      {audit.data !== undefined && audit.data.items.length > 0 ? (
         <div className="audit-log-panel__table-wrap">
           <table className="audit-log-panel__table">
             <thead>
