@@ -17,6 +17,13 @@
       "breakpoints": true
     },
     {
+      "idx": 2,
+      "version": "7",
+      "when": 1753840800000,
+      "tag": "0002_auth",
+      "breakpoints": true
+    },
+    {
       "idx": 3,
       "version": "7",
       "when": 1753844400000,
