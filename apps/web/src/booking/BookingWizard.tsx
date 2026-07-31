@@ -7,7 +7,7 @@ import type {
   ServiceTypeDto,
 } from '@scanflow/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
+import { useEffect, useId, useState, type ReactElement } from 'react';
 
 import {
   ApiProblemError,
@@ -16,11 +16,17 @@ import {
   fetchServiceTypes,
   suggestAppointments,
 } from '../api/client';
+import { ModalShell } from '../management/ModalShell';
 import type { GridLane } from '../schedule/build-schedule-view';
 
 import { blankStep, chainIsValid } from './chain-editor';
 import { ChainBuilder } from './ChainBuilder';
 import { candidateToGhosts, type GhostSegment } from './ghost-preview';
+import {
+  formatPatientWindowLabel,
+  patientWindowPayload,
+} from './patient-window';
+import { PatientAvailabilityFields } from './PatientAvailabilityFields';
 import { PatientPicker } from './PatientPicker';
 import { SuggestionsPanel } from './SuggestionsPanel';
 
@@ -48,7 +54,6 @@ export function BookingWizard({
   onGhostChange,
 }: BookingWizardProps): ReactElement | null {
   const titleId = useId();
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const queryClient = useQueryClient();
 
   const [phase, setPhase] = useState<WizardPhase>('patient');
@@ -59,6 +64,9 @@ export function BookingWizard({
   const [modified, setModified] = useState(false);
   const [date, setDate] = useState(viewedDate);
   const [candidates, setCandidates] = useState<CandidateDto[]>([]);
+  const [alternateDates, setAlternateDates] = useState<
+    { date: string; candidateCount: number }[]
+  >([]);
   const [scheduleVersion, setScheduleVersion] = useState(0);
   const [selected, setSelected] = useState<CandidateDto | null>(null);
   const [preview, setPreview] = useState<CandidateDto | null>(null);
@@ -68,6 +76,9 @@ export function BookingWizard({
   const [suggesting, setSuggesting] = useState(false);
   const [booking, setBooking] = useState(false);
   const [bookError, setBookError] = useState<string | null>(null);
+  const [usePatientWindow, setUsePatientWindow] = useState(false);
+  const [patientWindowStart, setPatientWindowStart] = useState('08:00');
+  const [patientWindowEnd, setPatientWindowEnd] = useState('12:00');
 
   const serviceTypesQuery = useQuery({
     queryKey: ['service-types'],
@@ -105,16 +116,6 @@ export function BookingWizard({
         };
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog === null) return;
-    if (open && phase !== 'suggestions') {
-      if (!dialog.open) dialog.showModal();
-    } else if (dialog.open) {
-      dialog.close();
-    }
-  }, [open, phase]);
-
-  useEffect(() => {
     if (preview === null || schedule === undefined) {
       onGhostChange([]);
       return;
@@ -145,21 +146,38 @@ export function BookingWizard({
     return [blankStep(first.id, 1)];
   }
 
-  async function loadSuggestions(): Promise<void> {
-    if (patient === null) return;
+  function patientWindowIsValid(): boolean {
+    if (!usePatientWindow) return true;
+    return patientWindowStart.slice(0, 5) < patientWindowEnd.slice(0, 5);
+  }
+
+  function suggestRequest(forDate: string) {
+    return {
+      patientId: patient?.id ?? '',
+      date: forDate,
+      steps,
+      ...(templateId === null ? {} : { templateId }),
+      ...patientWindowPayload(
+        usePatientWindow,
+        patientWindowStart,
+        patientWindowEnd,
+      ),
+    };
+  }
+
+  async function loadSuggestions(forDate?: string): Promise<void> {
+    if (patient === null || !patientWindowIsValid()) return;
+    const targetDate = forDate ?? date;
     setSuggesting(true);
     setSuggestError(null);
     setConflictBanner(null);
     setSelected(null);
     setPreview(null);
     try {
-      const result = await suggestAppointments({
-        patientId: patient.id,
-        date,
-        steps,
-        ...(templateId === null ? {} : { templateId }),
-      });
+      const result = await suggestAppointments(suggestRequest(targetDate));
+      setDate(targetDate);
       setCandidates(result.candidates);
+      setAlternateDates(result.alternateDates ?? []);
       setScheduleVersion(result.scheduleVersion);
       setPhase('suggestions');
     } catch (error) {
@@ -203,12 +221,7 @@ export function BookingWizard({
             : `That time was just booked. Here are ${String(fresh.length)} alternative${fresh.length === 1 ? '' : 's'}.`,
         );
         try {
-          const refreshed = await suggestAppointments({
-            patientId: patient.id,
-            date,
-            steps,
-            ...(templateId === null ? {} : { templateId }),
-          });
+          const refreshed = await suggestAppointments(suggestRequest(date));
           setScheduleVersion(refreshed.scheduleVersion);
           if (fresh.length === 0) {
             setCandidates(refreshed.candidates);
@@ -231,71 +244,69 @@ export function BookingWizard({
 
   return (
     <>
-      <dialog
-        ref={dialogRef}
-        className="wizard-dialog"
-        aria-labelledby={titleId}
-        onCancel={(event) => {
-          event.preventDefault();
-          onClose();
-        }}
+      <ModalShell
+        active={phase !== 'suggestions'}
+        onClose={onClose}
+        className="wizard wizard-dialog"
+        labelledBy={titleId}
+        overlayClassName="wizard-shell"
       >
-        <div className="wizard">
-          <header className="wizard__header">
-            <h2 id={titleId} className="wizard__title">
-              Book appointment
-            </h2>
-            <button
-              type="button"
-              className="btn btn--ghost btn--compact"
-              onClick={onClose}
-            >
-              Close
-            </button>
-          </header>
+        <header className="wizard__header">
+          <h2 id={titleId} className="wizard__title">
+            Book appointment
+          </h2>
+          <button
+            type="button"
+            className="btn btn--ghost btn--compact"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </header>
 
-          <nav className="wizard__steps" aria-label="Booking steps">
-            <StepLabel active={phase === 'patient'} done={patient !== null}>
-              Patient
-            </StepLabel>
-            <StepLabel
-              active={phase === 'chain'}
-              done={phase === 'date' || phase === 'suggestions'}
-            >
-              Chain
-            </StepLabel>
-            <StepLabel active={phase === 'date'} done={phase === 'suggestions'}>
-              Date
-            </StepLabel>
-          </nav>
+        <nav className="wizard__steps" aria-label="Booking steps">
+          <StepLabel active={phase === 'patient'} done={patient !== null}>
+            Patient
+          </StepLabel>
+          <StepLabel
+            active={phase === 'chain'}
+            done={phase === 'date' || phase === 'suggestions'}
+          >
+            Chain
+          </StepLabel>
+          <StepLabel active={phase === 'date'} done={phase === 'suggestions'}>
+            Date
+          </StepLabel>
+        </nav>
 
-          <div className="wizard__body">
-            {phase === 'patient' ? (
-              <PatientPicker selected={patient} onSelect={setPatient} />
-            ) : null}
+        <div className="wizard__body">
+          {phase === 'patient' ? (
+            <PatientPicker selected={patient} onSelect={setPatient} />
+          ) : null}
 
-            {phase === 'chain' && validationContext !== null ? (
-              <ChainBuilder
-                steps={steps}
-                serviceTypes={serviceTypes}
-                validationContext={validationContext}
-                templateId={templateId}
-                templateName={templateName}
-                modified={modified}
-                onChange={(next) => {
-                  setSteps(next.steps);
-                  setTemplateId(next.templateId);
-                  setTemplateName(next.templateName);
-                  setModified(next.modified);
-                }}
-              />
-            ) : null}
+          {phase === 'chain' && validationContext !== null ? (
+            <ChainBuilder
+              steps={steps}
+              serviceTypes={serviceTypes}
+              validationContext={validationContext}
+              templateId={templateId}
+              templateName={templateName}
+              modified={modified}
+              onChange={(next) => {
+                setSteps(next.steps);
+                setTemplateId(next.templateId);
+                setTemplateName(next.templateName);
+                setModified(next.modified);
+              }}
+            />
+          ) : null}
 
-            {phase === 'chain' && validationContext === null ? (
-              <p>Loading clinic configuration…</p>
-            ) : null}
+          {phase === 'chain' && validationContext === null ? (
+            <p>Loading clinic configuration…</p>
+          ) : null}
 
-            {phase === 'date' ? (
+          {phase === 'date' ? (
+            <>
               <label className="field">
                 <span className="field__label">Appointment date</span>
                 <input
@@ -306,85 +317,99 @@ export function BookingWizard({
                   }}
                 />
               </label>
-            ) : null}
+              <PatientAvailabilityFields
+                enabled={usePatientWindow}
+                windowStart={patientWindowStart}
+                windowEnd={patientWindowEnd}
+                onEnabledChange={setUsePatientWindow}
+                onWindowStartChange={setPatientWindowStart}
+                onWindowEndChange={setPatientWindowEnd}
+              />
+            </>
+          ) : null}
 
-            {suggestError !== null ? (
-              <p className="field__error" role="alert">
-                {suggestError}
-              </p>
-            ) : null}
-          </div>
-
-          <footer className="wizard__footer">
-            {phase !== 'patient' ? (
-              <button
-                type="button"
-                className="btn btn--ghost"
-                onClick={() => {
-                  if (phase === 'chain') setPhase('patient');
-                  if (phase === 'date') setPhase('chain');
-                }}
-              >
-                Back
-              </button>
-            ) : (
-              <span />
-            )}
-
-            {phase === 'patient' ? (
-              <button
-                type="button"
-                className="btn btn--primary"
-                disabled={patient === null || serviceTypes[0] === undefined}
-                title={
-                  patient === null ? 'Select a patient to continue' : undefined
-                }
-                onClick={() => {
-                  setSteps(ensureBlankChain());
-                  setPhase('chain');
-                }}
-              >
-                Continue
-              </button>
-            ) : null}
-
-            {phase === 'chain' ? (
-              <button
-                type="button"
-                className="btn btn--primary"
-                disabled={!canContinueFromChain}
-                title={
-                  canContinueFromChain
-                    ? undefined
-                    : 'Fix the chain errors above to continue'
-                }
-                onClick={() => {
-                  setPhase('date');
-                }}
-              >
-                Continue
-              </button>
-            ) : null}
-
-            {phase === 'date' ? (
-              <button
-                type="button"
-                className="btn btn--primary"
-                disabled={suggesting || date === ''}
-                onClick={() => {
-                  void loadSuggestions();
-                }}
-              >
-                {suggesting ? 'Finding times…' : 'Find times'}
-              </button>
-            ) : null}
-          </footer>
+          {suggestError !== null ? (
+            <p className="field__error" role="alert">
+              {suggestError}
+            </p>
+          ) : null}
         </div>
-      </dialog>
+
+        <footer className="wizard__footer">
+          {phase !== 'patient' ? (
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() => {
+                if (phase === 'chain') setPhase('patient');
+                if (phase === 'date') setPhase('chain');
+              }}
+            >
+              Back
+            </button>
+          ) : (
+            <span />
+          )}
+
+          {phase === 'patient' ? (
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={patient === null || serviceTypes[0] === undefined}
+              title={
+                patient === null ? 'Select a patient to continue' : undefined
+              }
+              onClick={() => {
+                setSteps(ensureBlankChain());
+                setPhase('chain');
+              }}
+            >
+              Continue
+            </button>
+          ) : null}
+
+          {phase === 'chain' ? (
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={!canContinueFromChain}
+              title={
+                canContinueFromChain
+                  ? undefined
+                  : 'Fix the chain errors above to continue'
+              }
+              onClick={() => {
+                setPhase('date');
+              }}
+            >
+              Continue
+            </button>
+          ) : null}
+
+          {phase === 'date' ? (
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={suggesting || date === '' || !patientWindowIsValid()}
+              onClick={() => {
+                void loadSuggestions();
+              }}
+            >
+              {suggesting ? 'Finding times…' : 'Find times'}
+            </button>
+          ) : null}
+        </footer>
+      </ModalShell>
 
       {phase === 'suggestions' ? (
         <SuggestionsPanel
           candidates={candidates}
+          alternateDates={alternateDates}
+          patientWindowLabel={
+            usePatientWindow
+              ? formatPatientWindowLabel(patientWindowStart, patientWindowEnd)
+              : null
+          }
           steps={steps}
           timeZone={schedule?.timezone ?? 'UTC'}
           conflictBanner={conflictBanner}
@@ -395,6 +420,9 @@ export function BookingWizard({
           bookError={bookError}
           onPreview={setPreview}
           onSelect={setSelected}
+          onPickAlternateDate={(nextDate) => {
+            void loadSuggestions(nextDate);
+          }}
           onNotesChange={setNotes}
           onBook={() => {
             void confirmBook();

@@ -10,6 +10,7 @@ import { pinoHttp } from 'pino-http';
 import type { AppContainer } from '../container.js';
 
 import { errorHandler } from './middleware/errorHandler.js';
+import { mountApiDocs } from './openapi/mount-docs.js';
 import { buildApiRouter } from './routes/api.routes.js';
 
 export function createApp(
@@ -23,7 +24,22 @@ export function createApp(
   const app = express();
 
   app.disable('x-powered-by');
-  app.use(helmet());
+  // Scalar docs load from cdn.jsdelivr.net with an inline boot script.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+          scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
+          styleSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
+          imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+          fontSrc: ["'self'", 'data:', 'https://cdn.jsdelivr.net'],
+          connectSrc: ["'self'"],
+          workerSrc: ["'self'", 'blob:'],
+        },
+      },
+    }),
+  );
   app.use(
     cors({
       origin: container.config.CORS_ORIGIN,
@@ -58,6 +74,7 @@ export function createApp(
     }),
   );
 
+  mountApiDocs(app);
   app.use('/api/v1', buildApiRouter(container));
 
   app.use(

@@ -48,9 +48,9 @@ export interface EngineStep {
    */
   minGapSlots: number;
   /**
-   * Longest permitted delay before this step. Imaging later than this is
-   * clinically invalid, so this is a real upper bound and not a preference.
-   * Must be at least `minGapSlots`. Ignored for the first step.
+   * Longest permitted delay before this step. When zero while `minGapSlots` is
+   * positive, no upper cap applies — only the minimum is enforced. When both are
+   * zero, no gap is required. Ignored for the first step.
    */
   maxGapSlots: number;
   /**

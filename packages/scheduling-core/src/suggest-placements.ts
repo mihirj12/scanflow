@@ -253,7 +253,11 @@ export function suggestPlacements(request: PlacementRequest): Candidate[] {
   function explore(plan: StepPlan, cursor: number): void {
     // Ascending, so the tightest legal delay is tried first: it finds good
     // solutions early, which is what makes the bound below bite.
-    for (let gap = plan.step.minGapSlots; gap <= plan.step.maxGapSlots; gap++) {
+    const maxGap =
+      plan.step.maxGapSlots === 0 && plan.step.minGapSlots > 0
+        ? totalSlots
+        : plan.step.maxGapSlots;
+    for (let gap = plan.step.minGapSlots; gap <= maxGap; gap++) {
       const start = cursor + gap;
       const earliestEnd = start + plan.minTail;
       if (earliestEnd > totalSlots) break;

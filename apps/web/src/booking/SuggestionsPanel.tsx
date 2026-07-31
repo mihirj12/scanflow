@@ -3,8 +3,16 @@ import { type ReactElement } from 'react';
 
 import { describeCandidate } from './ghost-preview';
 
+export interface AlternateDateOption {
+  date: string;
+  candidateCount: number;
+}
+
 export interface SuggestionsPanelProps {
   candidates: readonly CandidateDto[];
+  alternateDates: readonly AlternateDateOption[];
+  /** When set, suggestions were filtered to this clinic-local window. */
+  patientWindowLabel: string | null;
   steps: readonly ChainStep[];
   timeZone: string;
   conflictBanner: string | null;
@@ -15,6 +23,7 @@ export interface SuggestionsPanelProps {
   bookError: string | null;
   onPreview: (candidate: CandidateDto | null) => void;
   onSelect: (candidate: CandidateDto) => void;
+  onPickAlternateDate: (date: string) => void;
   onNotesChange: (notes: string) => void;
   onBook: () => void;
   onBack: () => void;
@@ -23,6 +32,8 @@ export interface SuggestionsPanelProps {
 
 export function SuggestionsPanel({
   candidates,
+  alternateDates,
+  patientWindowLabel,
   steps,
   timeZone,
   conflictBanner,
@@ -33,6 +44,7 @@ export function SuggestionsPanel({
   bookError,
   onPreview,
   onSelect,
+  onPickAlternateDate,
   onNotesChange,
   onBook,
   onBack,
@@ -57,11 +69,48 @@ export function SuggestionsPanel({
         </p>
       ) : null}
 
-      {candidates.length === 0 ? (
-        <p className="suggestions__empty">
-          No times fit this chain on the selected day. Change the date or
-          shorten a step, then try again.
+      {patientWindowLabel !== null ? (
+        <p className="suggestions__filter">
+          Patient available {patientWindowLabel}
         </p>
+      ) : null}
+
+      {candidates.length === 0 ? (
+        <div className="suggestions__empty-block">
+          <p className="suggestions__empty">
+            No times fit this chain on the selected day. The planner only uses
+            open availability windows — gaps between intervals stay closed.
+          </p>
+          {alternateDates.length > 0 ? (
+            <>
+              <p className="suggestions__alternate-label">Try another day:</p>
+              <ul className="suggestions__alternate-list">
+                {alternateDates.map((option) => (
+                  <li key={option.date}>
+                    <button
+                      type="button"
+                      className="btn btn--ghost suggestions__alternate-btn"
+                      onClick={() => {
+                        onPickAlternateDate(option.date);
+                      }}
+                    >
+                      {formatAlternateDate(option.date, timeZone)}
+                      <span className="suggestions__alternate-meta">
+                        {String(option.candidateCount)} option
+                        {option.candidateCount === 1 ? '' : 's'}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="suggestions__empty">
+              No feasible days found in the next few weeks. Adjust the chain or
+              set availability for more resources.
+            </p>
+          )}
+        </div>
       ) : (
         <ul className="suggestions__list">
           {candidates.map((candidate, index) => {
@@ -168,4 +217,14 @@ export function SuggestionsPanel({
       )}
     </aside>
   );
+}
+
+function formatAlternateDate(date: string, timeZone: string): string {
+  const parsed = new Date(`${date}T12:00:00`);
+  return new Intl.DateTimeFormat('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone,
+  }).format(parsed);
 }

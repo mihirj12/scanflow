@@ -11,6 +11,7 @@ import type {
 } from '../../modules/shared/records.js';
 import type { Db, DbTransaction } from '../db/client.js';
 import {
+  appointment,
   appointmentSegment,
   scheduleVersion,
   serviceType,
@@ -42,16 +43,25 @@ export function createSegmentRepository(db: Db): SegmentRepository {
   return {
     async listActiveOverlappingDay(clinicId, dayStart, dayEnd) {
       const rows = await db
-        .select()
+        .select({ segment: appointmentSegment })
         .from(appointmentSegment)
+        .innerJoin(
+          appointment,
+          eq(appointment.id, appointmentSegment.appointmentId),
+        )
         .where(
           and(
             eq(appointmentSegment.clinicId, clinicId),
             eq(appointmentSegment.status, 'ACTIVE'),
+            inArray(appointment.status, [
+              'SCHEDULED',
+              'CHECKED_IN',
+              'IN_PROGRESS',
+            ]),
             sql`${appointmentSegment.during} && tstzrange(${dayStart.toISOString()}::timestamptz, ${dayEnd.toISOString()}::timestamptz, '[)')`,
           ),
         );
-      return rows.map(toSegmentRecord);
+      return rows.map((row) => toSegmentRecord(row.segment));
     },
   };
 }

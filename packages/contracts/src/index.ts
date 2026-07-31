@@ -1,3 +1,5 @@
+import './openapi/init.js';
+
 export {
   APPOINTMENT_STATUSES,
   ENUM_VALUES,
@@ -19,6 +21,7 @@ export {
 
 export {
   chainStepSchema,
+  isGapMaxUnbounded,
   parseAppointmentChain,
   type ChainResource,
   type ChainServiceType,
@@ -31,6 +34,8 @@ export {
   allowedTransitions,
   canTransition,
 } from './status-transitions.js';
+
+export { canBookAppointments, canEditResourceAvailability } from './rbac.js';
 
 export {
   appointmentDetailSchema,
@@ -69,6 +74,9 @@ export {
   scheduleSegmentSchema,
   serviceTypeDtoSchema,
   sessionResponseSchema,
+  setResourceDayAvailabilityBodySchema,
+  getResourceAvailabilityResponseSchema,
+  availabilityWindowSchema,
   suggestAppointmentsBodySchema,
   suggestAppointmentsResponseSchema,
   type AppointmentDetail,
@@ -99,6 +107,9 @@ export {
   type RescheduleAppointmentBody,
   type ResourceDto,
   type ServiceTypeDto,
+  type SetResourceDayAvailabilityBody,
+  type GetResourceAvailabilityResponse,
+  type AvailabilityWindow,
   type SessionResponse,
   type SuggestAppointmentsBody,
   type SuggestAppointmentsResponse,

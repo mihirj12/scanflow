@@ -2,6 +2,7 @@ import {
   type AppointmentStatus,
   type BookAppointmentBody,
   bookAppointmentBodySchema,
+  canBookAppointments,
   type CancelAppointmentBody,
   cancelAppointmentBodySchema,
   type CreateAppointmentTemplateBody,
@@ -18,12 +19,20 @@ import {
   listPatientsQuerySchema,
   type RescheduleAppointmentBody,
   rescheduleAppointmentBodySchema,
+  type SetResourceDayAvailabilityBody,
+  setResourceDayAvailabilityBodySchema,
   type SuggestAppointmentsBody,
   suggestAppointmentsBodySchema,
 } from '@scanflow/contracts';
-import { Router } from 'express';
+import {
+  Router,
+  type NextFunction,
+  type Request,
+  type Response,
+} from 'express';
 
 import type { AppContainer } from '../../container.js';
+import { ForbiddenError } from '../../errors/domain-errors.js';
 import { streamSchedule } from '../controllers/schedule-stream.controller.js';
 import { authenticate, requireRole } from '../middleware/authenticate.js';
 import { idempotency } from '../middleware/idempotency.js';
@@ -42,6 +51,20 @@ function routeParam(value: string | string[] | undefined): string | undefined {
  */
 function actorOf(req: { auth?: { userId: string } }): string | null {
   return req.auth?.userId ?? null;
+}
+
+/** Clinicians view the schedule; only reception and admin book. */
+function requireBookPermission(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): void {
+  const role = req.auth?.role;
+  if (role === undefined || !canBookAppointments(role)) {
+    next(new ForbiddenError(['RECEPTIONIST', 'ADMIN']));
+    return;
+  }
+  next();
 }
 
 export function buildApiRouter(container: AppContainer): Router {
@@ -134,6 +157,8 @@ export function buildApiRouter(container: AppContainer): Router {
         const body = await container.useCases.getDaySchedule({
           clinicId,
           date: query.date,
+          actorRole: req.auth?.role ?? 'RECEPTIONIST',
+          actorResourceId: req.auth?.resourceId ?? null,
         });
         res.json(body);
       } catch (error) {
@@ -144,6 +169,7 @@ export function buildApiRouter(container: AppContainer): Router {
 
   api.post(
     '/appointments/suggestions',
+    requireBookPermission,
     validate(suggestAppointmentsBodySchema),
     async (req, res, next) => {
       try {
@@ -161,6 +187,7 @@ export function buildApiRouter(container: AppContainer): Router {
 
   api.post(
     '/appointments',
+    requireBookPermission,
     idempotency({ clinicId, records: container.repos.idempotency }),
     validate(bookAppointmentBodySchema),
     async (req, res, next) => {
@@ -196,6 +223,9 @@ export function buildApiRouter(container: AppContainer): Router {
           ...(query.date === undefined ? {} : { date: query.date }),
           ...(query.status === undefined ? {} : { status: query.status }),
           ...(query.q === undefined ? {} : { q: query.q }),
+          ...(query.patientId === undefined
+            ? {}
+            : { patientId: query.patientId }),
           ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
         });
         res.json({
@@ -316,6 +346,7 @@ export function buildApiRouter(container: AppContainer): Router {
   for (const [path, to] of [
     ['cancel', 'CANCELLED'],
     ['check-in', 'CHECKED_IN'],
+    ['undo-check-in', 'SCHEDULED'],
     ['no-show', 'NO_SHOW'],
     ['start', 'IN_PROGRESS'],
     ['complete', 'COMPLETED'],
@@ -461,6 +492,57 @@ export function buildApiRouter(container: AppContainer): Router {
       next(error);
     }
   });
+
+  api.get(
+    '/resources/:id/availability',
+    validate(getScheduleQuerySchema, 'query'),
+    async (req, res, next) => {
+      try {
+        const resourceId = routeParam(req.params['id']);
+        if (resourceId === undefined) {
+          res.status(400).end();
+          return;
+        }
+        const query = req.query as unknown as GetScheduleQuery;
+        const body = await container.useCases.getResourceAvailability({
+          clinicId,
+          resourceId,
+          date: query.date,
+          actorRole: req.auth?.role ?? 'RECEPTIONIST',
+          actorResourceId: req.auth?.resourceId ?? null,
+        });
+        res.json(body);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  api.put(
+    '/resources/:id/availability',
+    validate(setResourceDayAvailabilityBodySchema),
+    async (req, res, next) => {
+      try {
+        const resourceId = routeParam(req.params['id']);
+        if (resourceId === undefined) {
+          res.status(400).end();
+          return;
+        }
+        const payload = req.body as SetResourceDayAvailabilityBody;
+        const body = await container.useCases.setResourceDayAvailability({
+          clinicId,
+          resourceId,
+          date: payload.date,
+          windows: payload.windows,
+          actorRole: req.auth?.role ?? 'RECEPTIONIST',
+          actorResourceId: req.auth?.resourceId ?? null,
+        });
+        res.json(body);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   api.get('/service-types', async (_req, res, next) => {
     try {

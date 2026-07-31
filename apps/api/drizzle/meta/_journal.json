@@ -17,10 +17,17 @@
       "breakpoints": true
     },
     {
-      "idx": 2,
+      "idx": 3,
       "version": "7",
-      "when": 1753840800000,
-      "tag": "0002_auth",
+      "when": 1753844400000,
+      "tag": "0003_user_resource",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1753848000000,
+      "tag": "0004_unbounded_gap_max",
       "breakpoints": true
     }
   ]

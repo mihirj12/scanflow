@@ -1,5 +1,5 @@
 import type { ChainStep } from '@scanflow/contracts';
-import { and, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, eq, ilike, inArray, ne, or, sql } from 'drizzle-orm';
 
 import type {
   AppointmentRepository,
@@ -48,6 +48,24 @@ export function createPatientRepository(db: Db): PatientRepository {
         .limit(1);
       const row = rows[0];
       return row === undefined ? null : toPatientRecord(row);
+    },
+
+    async getByIds(clinicId, patientIds) {
+      if (patientIds.length === 0) return new Map();
+      const rows = await db
+        .select()
+        .from(patient)
+        .where(
+          and(
+            eq(patient.clinicId, clinicId),
+            inArray(patient.id, [...patientIds]),
+          ),
+        );
+      const map = new Map<string, PatientRecord>();
+      for (const row of rows) {
+        map.set(row.id, toPatientRecord(row));
+      }
+      return map;
     },
 
     async search(clinicId, q, limit) {
@@ -206,8 +224,14 @@ export function createAppointmentRepository(db: Db): AppointmentRepository {
       if (args.status !== undefined) {
         conditions.push(eq(appointment.status, args.status));
       }
+      if (args.patientId !== undefined) {
+        conditions.push(eq(appointment.patientId, args.patientId));
+      }
 
       const q = args.q?.trim();
+      if (q !== undefined && q !== '' && args.status !== 'CANCELLED') {
+        conditions.push(ne(appointment.status, 'CANCELLED'));
+      }
       let headerRows;
       if (q !== undefined && q !== '') {
         headerRows = await db
@@ -402,7 +426,11 @@ export function createAppointmentRepository(db: Db): AppointmentRepository {
         throw new Error('appointment status update returned no row');
       }
 
-      if (args.status === 'CANCELLED') {
+      if (
+        args.status === 'CANCELLED' ||
+        args.status === 'COMPLETED' ||
+        args.status === 'NO_SHOW'
+      ) {
         await client
           .update(appointmentSegment)
           .set({ status: 'CANCELLED' })

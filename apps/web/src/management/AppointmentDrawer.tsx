@@ -9,6 +9,7 @@ import { useCallback, useId, useState, type ReactElement } from 'react';
 import {
   fetchAppointment,
   fetchPatient,
+  fetchServiceTypes,
   postAppointmentStatus,
   type StatusActionPath,
 } from '../api/client';
@@ -74,12 +75,25 @@ function DrawerBody({
     enabled: patientId !== undefined,
   });
 
+  const serviceTypesQuery = useQuery({
+    queryKey: ['service-types'],
+    queryFn: fetchServiceTypes,
+  });
+
   const handleEscape = useCallback(() => {
     onClose();
   }, [onClose]);
 
   const patient = patientQuery.data;
   const status = detail?.status;
+  const serviceTypeName = new Map<string, string>();
+  for (const service of serviceTypesQuery.data?.items ?? []) {
+    serviceTypeName.set(service.id, service.name);
+  }
+  const stepLabel = new Map<number, string>();
+  for (const step of detail?.steps ?? []) {
+    stepLabel.set(step.seq, serviceTypeName.get(step.serviceTypeId) ?? 'Step');
+  }
 
   async function runStatus(
     path: StatusActionPath,
@@ -186,7 +200,8 @@ function DrawerBody({
                   <span>
                     {segment.kind === 'DELAY'
                       ? `Wait (before step ${String(segment.seq)})`
-                      : `Step ${String(segment.seq)}`}
+                      : (stepLabel.get(segment.seq) ??
+                        `Step ${String(segment.seq)}`)}
                   </span>
                   <span className="appointment-drawer__muted">
                     {formatInstant(segment.patientStart, timeZone)}–

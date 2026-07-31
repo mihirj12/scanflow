@@ -115,7 +115,7 @@ describe('parseAppointmentChain', () => {
     ).toBe(true);
   });
 
-  it('rejects maxGap below minGap', () => {
+  it('rejects maxGap below minGap when a max is set', () => {
     const result = parseAppointmentChain(
       [step(1, doctor), step(2, scan, { minGapMin: 60, maxGapMin: 30 })],
       ctx,
@@ -127,6 +127,14 @@ describe('parseAppointmentChain', () => {
         /maxGapMin .* at least minGapMin/i.test(i.message),
       ),
     ).toBe(true);
+  });
+
+  it('accepts a minimum wait with no maximum (maxGapMin 0)', () => {
+    const result = parseAppointmentChain(
+      [step(1, doctor), step(2, scan, { minGapMin: 60, maxGapMin: 0 })],
+      ctx,
+    );
+    expect(result.success).toBe(true);
   });
 
   it('rejects sameResourceAsSeq across resource types', () => {

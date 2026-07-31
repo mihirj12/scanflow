@@ -12,6 +12,7 @@ export interface AuthenticatedActor {
   clinicId: string;
   email: string;
   role: UserRole;
+  resourceId: string | null;
 }
 
 /**

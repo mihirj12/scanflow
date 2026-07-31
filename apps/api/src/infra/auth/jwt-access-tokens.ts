@@ -28,6 +28,7 @@ export function createJwtAccessTokenIssuer(args: {
         clinicId: claims.clinicId,
         email: claims.email,
         role: claims.role,
+        resourceId: claims.resourceId,
       })
         .setProtectedHeader({ alg: 'HS256' })
         .setSubject(claims.userId)
@@ -53,11 +54,19 @@ export function createJwtAccessTokenIssuer(args: {
         ) {
           return null;
         }
+        const resourceIdRaw = payload['resourceId'];
+        const resourceId =
+          resourceIdRaw === null || resourceIdRaw === undefined
+            ? null
+            : typeof resourceIdRaw === 'string'
+              ? resourceIdRaw
+              : null;
         return {
           userId: payload.sub,
           clinicId: payload['clinicId'],
           email: payload['email'],
           role: role.data,
+          resourceId,
         };
       } catch {
         // Expired, tampered, wrong audience — all the same to the caller.

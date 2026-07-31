@@ -18,6 +18,7 @@ function toAuthUser(row: typeof appUser.$inferSelect): AuthUser {
     role: row.role,
     passwordHash: row.passwordHash,
     active: row.active,
+    resourceId: row.resourceId ?? null,
   };
 }
 

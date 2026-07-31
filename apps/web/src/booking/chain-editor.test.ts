@@ -2,6 +2,8 @@ import type { ChainStep, ServiceTypeDto } from '@scanflow/contracts';
 import { describe, expect, it } from 'vitest';
 
 import {
+  blankStep,
+  DEFAULT_GAP_AFTER_INJECT_MIN,
   normalizeChainSteps,
   reorderChainSteps,
   summarizeChain,
@@ -10,6 +12,7 @@ import {
 
 const doctor = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
 const scan = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1';
+const inject = 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1';
 
 const serviceTypes: ServiceTypeDto[] = [
   {
@@ -17,6 +20,13 @@ const serviceTypes: ServiceTypeDto[] = [
     code: 'CONSULT',
     name: 'Consultation',
     resourceType: 'DOCTOR',
+    requiredModality: null,
+  },
+  {
+    id: inject,
+    code: 'INJECT',
+    name: 'Tracer injection',
+    resourceType: 'NMT_ROOM',
     requiredModality: null,
   },
   {
@@ -97,6 +107,39 @@ describe('normalizeChainSteps / reorder', () => {
     );
     expect(steps[0]?.minGapMin).toBe(0);
     expect(steps[0]?.maxGapMin).toBe(0);
+  });
+
+  it('clears gaps not immediately after injection', () => {
+    const steps = normalizeChainSteps(
+      [
+        step(1, doctor, { minGapMin: 0, maxGapMin: 0 }),
+        step(2, scan, { minGapMin: 15, maxGapMin: 15 }),
+      ],
+      serviceTypes,
+    );
+    expect(steps[1]?.minGapMin).toBe(0);
+    expect(steps[1]?.maxGapMin).toBe(0);
+  });
+
+  it('keeps gaps on the step following injection', () => {
+    const steps = normalizeChainSteps(
+      [
+        step(1, inject, { minGapMin: 0, maxGapMin: 0 }),
+        step(2, scan, { minGapMin: 60, maxGapMin: 90 }),
+      ],
+      serviceTypes,
+    );
+    expect(steps[1]?.minGapMin).toBe(60);
+    expect(steps[1]?.maxGapMin).toBe(90);
+  });
+
+  it('defaults a 30-minute wait when adding a step after injection', () => {
+    const added = blankStep(scan, 2, {
+      afterStep: step(1, inject),
+      serviceTypes,
+    });
+    expect(added.minGapMin).toBe(DEFAULT_GAP_AFTER_INJECT_MIN);
+    expect(added.maxGapMin).toBe(DEFAULT_GAP_AFTER_INJECT_MIN);
   });
 });
 

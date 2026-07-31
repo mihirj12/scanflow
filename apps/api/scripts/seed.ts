@@ -227,14 +227,14 @@ export async function seedDatabase(databaseUrl: string): Promise<void> {
             serviceTypeId: SERVICE.SCAN,
             durationMin: 30,
             minGapMin: 0,
-            maxGapMin: 15,
+            maxGapMin: 0,
           },
           {
             seq: 3,
             serviceTypeId: SERVICE.PROCESS,
             durationMin: 30,
             minGapMin: 0,
-            maxGapMin: 15,
+            maxGapMin: 0,
           },
         ],
       },
@@ -276,7 +276,7 @@ export async function seedDatabase(databaseUrl: string): Promise<void> {
             serviceTypeId: SERVICE.CONSULT,
             durationMin: 30,
             minGapMin: 0,
-            maxGapMin: 30,
+            maxGapMin: 0,
             sameResourceAsSeq: 1,
           },
         ],
@@ -303,15 +303,15 @@ export async function seedDatabase(databaseUrl: string): Promise<void> {
             seq: 3,
             serviceTypeId: SERVICE.SCAN,
             durationMin: 30,
-            minGapMin: 0,
-            maxGapMin: 15,
+            minGapMin: 30,
+            maxGapMin: 30,
           },
           {
             seq: 4,
             serviceTypeId: SERVICE.SCAN,
             durationMin: 30,
-            minGapMin: 120,
-            maxGapMin: 180,
+            minGapMin: 0,
+            maxGapMin: 0,
             sameResourceAsSeq: 3,
           },
           {
@@ -319,7 +319,7 @@ export async function seedDatabase(databaseUrl: string): Promise<void> {
             serviceTypeId: SERVICE.CONSULT,
             durationMin: 15,
             minGapMin: 0,
-            maxGapMin: 30,
+            maxGapMin: 0,
             sameResourceAsSeq: 1,
           },
         ],
@@ -339,15 +339,15 @@ export async function seedDatabase(databaseUrl: string): Promise<void> {
             seq: 2,
             serviceTypeId: SERVICE.SCAN,
             durationMin: 45,
-            minGapMin: 45,
-            maxGapMin: 75,
+            minGapMin: 30,
+            maxGapMin: 30,
           },
           {
             seq: 3,
             serviceTypeId: SERVICE.CONSULT,
             durationMin: 30,
             minGapMin: 0,
-            maxGapMin: 30,
+            maxGapMin: 0,
           },
         ],
       },
@@ -394,7 +394,12 @@ export async function seedDatabase(databaseUrl: string): Promise<void> {
     }
 
     const password = process.env['SEED_USER_PASSWORD'] ?? DEFAULT_SEED_PASSWORD;
-    const users = await seedUsers(db, SEED_CLINIC_ID, password);
+    const users = await seedUsers(
+      db,
+      SEED_CLINIC_ID,
+      password,
+      RESOURCE.DOCTOR,
+    );
     const days = await seedDemoDays(db, {
       clinicId: SEED_CLINIC_ID,
       services: SERVICE,

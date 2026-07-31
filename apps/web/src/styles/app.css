@@ -204,7 +204,32 @@ body {
 .schedule-grid__cell {
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  background: var(--slot-available);
+  background: var(--slot-unavailable);
+}
+
+.schedule-grid__cell--closed {
+  background: var(--slot-unavailable);
+}
+
+.schedule-grid__cell--open.schedule-grid__cell--doctor {
+  background: var(--seg-doctor-wash);
+}
+
+.schedule-grid__cell--open.schedule-grid__cell--nmt {
+  background: var(--seg-nmt-wash);
+}
+
+.schedule-grid__cell--open.schedule-grid__cell--scan {
+  background: var(--seg-scan-wash);
+}
+
+.schedule-segment__sublabel {
+  display: block;
+  font-size: 11px;
+  opacity: 0.9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* The segment is a positioned container: the hit area fills it and the kebab
@@ -304,7 +329,16 @@ body {
   background: var(--seg-patient);
 }
 
+.schedule-segment--visit {
+  z-index: 0;
+  background: var(--seg-patient-wash);
+  color: var(--seg-patient);
+  border: 1px solid var(--seg-patient);
+  opacity: 0.85;
+}
+
 .schedule-segment--delay {
+  z-index: 1;
   background: repeating-linear-gradient(
     -45deg,
     var(--seg-patient-wash),
@@ -439,6 +473,40 @@ body {
   color: var(--text);
 }
 
+.modal-shell,
+.wizard-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 8vh;
+}
+
+.modal-shell__backdrop,
+.wizard-shell__backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgb(24 24 27 / 0.35);
+  cursor: pointer;
+}
+
+.wizard-shell {
+  align-items: center;
+  padding-top: 0;
+}
+
+.wizard-shell .wizard-dialog {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 2rem);
+  overflow: hidden;
+}
+
 .wizard-dialog::backdrop {
   background: rgb(24 24 27 / 0.35);
 }
@@ -492,6 +560,38 @@ body {
   padding: var(--space-4);
   overflow: auto;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.patient-window {
+  margin: 0;
+  padding: 0;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.patient-window__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.patient-window__times {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.patient-window__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .wizard__actions {
@@ -643,9 +743,54 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+.suggestions__filter {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: 12px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
 .suggestions__empty {
   margin: var(--space-3);
   color: var(--text-muted);
+}
+
+.suggestions__empty-block {
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.suggestions__empty-block .suggestions__empty {
+  margin: 0;
+}
+
+.suggestions__alternate-label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.suggestions__alternate-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.suggestions__alternate-btn {
+  width: 100%;
+  justify-content: space-between;
+  text-align: left;
+}
+
+.suggestions__alternate-meta {
+  font-size: 12px;
+  opacity: 0.8;
 }
 
 .suggestions__list {
@@ -861,4 +1006,193 @@ body {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+.patient-appointments,
+.availability-panel {
+  position: relative;
+  z-index: 1;
+  width: min(28rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 16vh);
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  border-radius: 2px;
+  box-shadow: 0 8px 32px rgb(24 24 27 / 0.12);
+}
+
+.patient-appointments__header,
+.availability-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.patient-appointments__title,
+.availability-panel__title {
+  margin: 0;
+  font-size: var(--font-size-heading);
+}
+
+.patient-appointments__meta,
+.availability-panel__hint {
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.patient-appointments__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.patient-appointments__row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.patient-appointments__row:hover {
+  background: var(--surface-sunken);
+}
+
+.patient-appointments__status {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.availability-panel__times {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.availability-panel__field {
+  padding: 0 var(--space-4);
+}
+
+.availability-panel__windows {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--space-4);
+}
+
+.availability-panel__window {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.availability-panel__window-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-1);
+}
+
+.availability-panel__add {
+  margin: 0 var(--space-4) var(--space-3);
+}
+
+.availability-panel__loading,
+.availability-panel__empty {
+  padding: 0 var(--space-4) var(--space-3);
+  color: var(--text-muted);
+}
+
+.availability-panel__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+
+.audit-log-panel {
+  width: min(720px, 92vw);
+  max-height: min(80vh, 640px);
+  display: flex;
+  flex-direction: column;
+}
+
+.audit-log-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.audit-log-panel__title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.audit-log-panel__hint {
+  margin: 0;
+  padding: var(--space-3) var(--space-4) 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.audit-log-panel__loading,
+.audit-log-panel__empty {
+  padding: var(--space-3) var(--space-4);
+  color: var(--text-muted);
+}
+
+.audit-log-panel__error {
+  padding: 0 var(--space-4) var(--space-3);
+  color: var(--danger);
+}
+
+.audit-log-panel__table-wrap {
+  overflow: auto;
+  padding: var(--space-3) var(--space-4);
+}
+
+.audit-log-panel__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.audit-log-panel__table th,
+.audit-log-panel__table td {
+  padding: var(--space-2) var(--space-2);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.audit-log-panel__table th {
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.audit-log-panel__table td:first-child {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }

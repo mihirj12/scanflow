@@ -13,6 +13,7 @@ import {
   type EngineStep,
   type Placement,
 } from '@scanflow/scheduling-core';
+import { DateTime } from 'luxon';
 
 import {
   NotFoundError,
@@ -20,6 +21,7 @@ import {
 } from '../../errors/domain-errors.js';
 import type { PatientRepository } from '../appointments/ports.js';
 import type {
+  ClinicRecord,
   ExceptionRecord,
   ResourceRecord,
   SegmentRecord,
@@ -32,8 +34,11 @@ import {
   clinicDayMinutes,
   clinicDayWindow,
   instantToSlot,
+  maskOutsidePatientWindow,
   openSlotsForResource,
   slotToInstant,
+  wallClockToInstant,
+  wallClockToLatestEndSlot,
   type ClinicDayGrid,
 } from './day-grid.mapper.js';
 import type {
@@ -57,6 +62,16 @@ export interface SuggestPlacementsDeps {
 
 export interface SuggestPlacementsCommand extends SuggestAppointmentsBody {
   clinicId: string;
+}
+
+interface ParsedDayCommand {
+  clinicId: string;
+  patientId: string;
+  date: string;
+  steps: readonly ChainStep[];
+  earliestStart?: string | undefined;
+  latestEnd?: string | undefined;
+  patientWindow?: { startsAt: string; endsAt: string } | undefined;
 }
 
 /**
@@ -111,76 +126,142 @@ export function createSuggestPlacementsUseCase(deps: SuggestPlacementsDeps) {
       serviceTypes,
       clinic.grid.slotMinutes,
     );
-    const day = clinicDayWindow(clinic.grid, cmd.date);
-    const dayStart = day.start.toJSDate();
-    const dayEnd = day.end.toJSDate();
-
     const resourceIds = resources.map((r) => r.id);
-    const [weekly, exceptions, segments, scheduleVersion] = await Promise.all([
-      deps.resources.listWorkingHours(resourceIds),
-      deps.resources.listExceptions(resourceIds, cmd.date),
-      deps.segments.listActiveOverlappingDay(cmd.clinicId, dayStart, dayEnd),
-      deps.scheduleVersions.get(cmd.clinicId, cmd.date),
-    ]);
+    const weekly = await deps.resources.listWorkingHours(resourceIds);
 
-    const engineResources = toEngineResources(
-      clinic.grid,
-      cmd.date,
+    const primary = await suggestForDate(deps, clinic, cmd, {
+      engineSteps,
       resources,
       weekly,
-      exceptions,
-      segments,
-    );
+    });
 
-    const patientBusyMask = buildBusyMask(
+    const alternateDates: NonNullable<
+      SuggestAppointmentsResponse['alternateDates']
+    > = [];
+    if (primary.candidates.length === 0) {
+      let cursor = DateTime.fromISO(cmd.date, { zone: clinic.grid.timezone });
+      let scanned = 0;
+      while (alternateDates.length < 5 && scanned < 30) {
+        cursor = cursor.plus({ days: 1 });
+        scanned += 1;
+        if (cursor.weekday === 6 || cursor.weekday === 7) continue;
+        const isoDate = cursor.toISODate();
+        if (isoDate === null) continue;
+        const dayResult = await suggestForDate(
+          deps,
+          clinic,
+          { ...cmd, date: isoDate },
+          { engineSteps, resources, weekly },
+        );
+        if (dayResult.candidates.length > 0) {
+          alternateDates.push({
+            date: isoDate,
+            candidateCount: dayResult.candidates.length,
+          });
+        }
+      }
+    }
+
+    return {
+      scheduleVersion: primary.scheduleVersion,
+      candidates: primary.candidates,
+      ...(alternateDates.length > 0 ? { alternateDates } : {}),
+    };
+  };
+}
+
+function resolveSearchWindow(
+  grid: ClinicDayGrid,
+  cmd: ParsedDayCommand,
+  totalSlots: number,
+): { earliestSlot: number; latestEndSlot: number } {
+  let earliestSlot = 0;
+  let latestEndSlot = totalSlots;
+  if (cmd.patientWindow !== undefined) {
+    earliestSlot = instantToSlot(
+      grid,
+      cmd.date,
+      wallClockToInstant(grid, cmd.date, cmd.patientWindow.startsAt),
+    );
+    latestEndSlot = wallClockToLatestEndSlot(
+      grid,
+      cmd.date,
+      cmd.patientWindow.endsAt,
+    );
+  } else {
+    if (cmd.earliestStart !== undefined) {
+      earliestSlot = instantToSlot(grid, cmd.date, new Date(cmd.earliestStart));
+    }
+    if (cmd.latestEnd !== undefined) {
+      latestEndSlot = instantToSlot(grid, cmd.date, new Date(cmd.latestEnd));
+    }
+  }
+  return { earliestSlot, latestEndSlot };
+}
+
+async function suggestForDate(
+  deps: SuggestPlacementsDeps,
+  clinic: ClinicRecord,
+  cmd: ParsedDayCommand,
+  loaded: {
+    engineSteps: EngineStep[];
+    resources: readonly ResourceRecord[];
+    weekly: readonly WorkingHoursRecord[];
+  },
+): Promise<{ scheduleVersion: number; candidates: CandidateDto[] }> {
+  const day = clinicDayWindow(clinic.grid, cmd.date);
+  const dayStart = day.start.toJSDate();
+  const dayEnd = day.end.toJSDate();
+  const resourceIds = loaded.resources.map((r) => r.id);
+
+  const [exceptions, segments, scheduleVersion] = await Promise.all([
+    deps.resources.listExceptions(resourceIds, cmd.date),
+    deps.segments.listActiveOverlappingDay(cmd.clinicId, dayStart, dayEnd),
+    deps.scheduleVersions.get(cmd.clinicId, cmd.date),
+  ]);
+
+  const engineResources = toEngineResources(
+    clinic.grid,
+    cmd.date,
+    loaded.resources,
+    loaded.weekly,
+    exceptions,
+    segments,
+  );
+
+  const searchWindow = resolveSearchWindow(clinic.grid, cmd, day.totalSlots);
+
+  const patientBusyMask =
+    buildBusyMask(
       clinic.grid,
       cmd.date,
       segments
         .filter((s) => s.patientId === cmd.patientId)
         .map((s) => ({ start: s.patientStart, end: s.patientEnd })),
+    ) |
+    maskOutsidePatientWindow(
+      day.totalSlots,
+      searchWindow.earliestSlot,
+      searchWindow.latestEndSlot,
     );
 
-    let earliestSlot = 0;
-    let latestEndSlot = day.totalSlots;
-    if (cmd.earliestStart !== undefined) {
-      earliestSlot = instantToSlot(
-        clinic.grid,
-        cmd.date,
-        new Date(cmd.earliestStart),
-      );
-    }
-    if (cmd.latestEnd !== undefined) {
-      latestEndSlot = instantToSlot(
-        clinic.grid,
-        cmd.date,
-        new Date(cmd.latestEnd),
-      );
-    }
+  const startedAt = performance.now();
+  const computed = suggestPlacements({
+    totalSlots: day.totalSlots,
+    steps: loaded.engineSteps,
+    resources: engineResources,
+    patientBusyMask,
+    maxCandidates: 5,
+  });
+  deps.metrics.suggestionComputed(performance.now() - startedAt);
 
-    // Times the engine only, not the queries around it: the metric answers
-    // "is the search slow", and a slow database is a different question.
-    const startedAt = performance.now();
-    const computed = suggestPlacements({
-      totalSlots: day.totalSlots,
-      steps: engineSteps,
-      resources: engineResources,
-      patientBusyMask,
-      maxCandidates: 5,
-    });
-    deps.metrics.suggestionComputed(performance.now() - startedAt);
+  const candidates = computed;
 
-    const candidates = computed.filter(
-      (candidate) =>
-        candidate.startSlot >= earliestSlot &&
-        candidate.endSlot <= latestEndSlot,
-    );
-
-    return {
-      scheduleVersion,
-      candidates: candidates.map((candidate) =>
-        toCandidateDto(clinic.grid, cmd.date, candidate),
-      ),
-    };
+  return {
+    scheduleVersion,
+    candidates: candidates.map((candidate) =>
+      toCandidateDto(clinic.grid, cmd.date, candidate),
+    ),
   };
 }
 

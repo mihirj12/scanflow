@@ -75,15 +75,25 @@ export async function seedUsers(
   db: Db,
   clinicId: string,
   password: string,
+  doctorResourceId: string,
 ): Promise<number> {
   let created = 0;
   for (const user of SEED_USERS) {
+    const resourceId = user.role === 'CLINICIAN' ? doctorResourceId : null;
     const existing = await db
       .select({ id: appUser.id })
       .from(appUser)
       .where(and(eq(appUser.clinicId, clinicId), eq(appUser.email, user.email)))
       .limit(1);
-    if (existing.length > 0) continue;
+    if (existing.length > 0) {
+      if (resourceId !== null) {
+        await db
+          .update(appUser)
+          .set({ resourceId })
+          .where(eq(appUser.id, existing[0]?.id ?? ''));
+      }
+      continue;
+    }
 
     await db.insert(appUser).values({
       clinicId,
@@ -91,6 +101,7 @@ export async function seedUsers(
       passwordHash: await hash(password, { algorithm: ARGON2ID }),
       displayName: user.displayName,
       role: user.role,
+      resourceId,
       active: true,
     });
     created += 1;

@@ -5,6 +5,9 @@ import type {
 } from '@scanflow/contracts';
 import { parseAppointmentChain } from '@scanflow/contracts';
 
+/** Default tracer uptake wait after injection before the next step may start. */
+export const DEFAULT_GAP_AFTER_INJECT_MIN = 30;
+
 export interface ChainSummary {
   stepCount: number;
   serviceMinutes: number;
@@ -74,7 +77,7 @@ export function normalizeChainSteps(
   );
   const byOldSeq = new Map(steps.map((step) => [step.seq, step]));
 
-  return steps.map((step, index) => {
+  const renumbered = steps.map((step, index) => {
     const seq = index + 1;
     const base: ChainStep = {
       seq,
@@ -117,6 +120,8 @@ export function normalizeChainSteps(
 
     return { ...base, sameResourceAsSeq: resolved };
   });
+
+  return enforceGapRules(renumbered, serviceTypes);
 }
 
 export function validateChainSteps(
@@ -150,8 +155,15 @@ export function chainIsValid(
   return validateChainSteps(steps, context).ok;
 }
 
-export function blankStep(serviceTypeId: string, seq: number): ChainStep {
-  return {
+export function blankStep(
+  serviceTypeId: string,
+  seq: number,
+  options: {
+    afterStep?: ChainStep;
+    serviceTypes?: readonly ServiceTypeDto[];
+  } = {},
+): ChainStep {
+  const base: ChainStep = {
     seq,
     serviceTypeId,
     durationMin: 30,
@@ -160,6 +172,15 @@ export function blankStep(serviceTypeId: string, seq: number): ChainStep {
     setupMin: 0,
     teardownMin: 0,
   };
+  const { afterStep, serviceTypes } = options;
+  if (
+    afterStep !== undefined &&
+    serviceTypes !== undefined &&
+    isInjectStep(afterStep, serviceTypes)
+  ) {
+    return defaultGapAfterInject(base);
+  }
+  return base;
 }
 
 /** Earlier steps of the same resource type — options for sameResourceAsSeq. */
@@ -188,4 +209,45 @@ export function sameResourceOptions(
     });
   }
   return options;
+}
+
+/** True when the step is tracer injection (NMT room, INJECT service). */
+export function isInjectStep(
+  step: ChainStep,
+  serviceTypes: readonly ServiceTypeDto[],
+): boolean {
+  const service = serviceTypes.find((s) => s.id === step.serviceTypeId);
+  return service?.code === 'INJECT';
+}
+
+/**
+ * Gaps are only allowed immediately after injection — stored on the following
+ * step. Every other step's gap-before fields are cleared.
+ */
+export function enforceGapRules(
+  steps: readonly ChainStep[],
+  serviceTypes: readonly ServiceTypeDto[],
+): ChainStep[] {
+  return steps.map((step, index) => {
+    if (index === 0) {
+      return { ...step, minGapMin: 0, maxGapMin: 0 };
+    }
+    const previous = steps[index - 1];
+    if (previous !== undefined && isInjectStep(previous, serviceTypes)) {
+      return step;
+    }
+    return { ...step, minGapMin: 0, maxGapMin: 0 };
+  });
+}
+
+/** Applies the default post-injection wait on `following` when gaps are unset. */
+export function defaultGapAfterInject(following: ChainStep): ChainStep {
+  if (following.minGapMin !== 0 || following.maxGapMin !== 0) {
+    return following;
+  }
+  return {
+    ...following,
+    minGapMin: DEFAULT_GAP_AFTER_INJECT_MIN,
+    maxGapMin: DEFAULT_GAP_AFTER_INJECT_MIN,
+  };
 }
