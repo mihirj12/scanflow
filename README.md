@@ -171,7 +171,8 @@ Deep dive: [docs/architecture.md](docs/architecture.md).
 
 ---
 
-## Agent / contributor orientation
+## Contributor orientation
 
-See [AGENTS.md](AGENTS.md) for layering rules, commands, and skills. Conventional
-Commits with scopes: `api`, `web`, `core`, `contracts`, `db`, etc.
+Layering rules, commands, and architectural detail live in
+[docs/architecture.md](docs/architecture.md) and [docs/adr/](docs/adr/).
+Conventional Commits with scopes: `api`, `web`, `core`, `contracts`, `db`, etc.

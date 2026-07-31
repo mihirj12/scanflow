@@ -5,9 +5,9 @@ import importX from 'eslint-plugin-import-x';
 import tseslint from 'typescript-eslint';
 
 /**
- * Rules that apply to every package. The bans here mirror the "Banned" list in
- * .cursor/rules/00-ground-rules.mdc — the point is that the ground rules are
- * mechanically enforced rather than merely documented.
+ * Rules that apply to every package. The bans here mirror the repository ground
+ * rules — the point is that they are mechanically enforced rather than merely
+ * documented.
  */
 export const baseConfig = tseslint.config(
   { ignores: ['dist/**', 'coverage/**', '.turbo/**', 'node_modules/**'] },

@@ -6,7 +6,7 @@
  * gist constraints, the kind/resource CHECK, the containment CHECK, the indexes
  * -- cannot be expressed by Drizzle's schema builder, so migrations are written
  * by hand and `drizzle-kit generate` is not used. See ADR 0001 and
- * .claude/skills/db-migration/SKILL.md.
+ * `apps/api/drizzle/`.
  *
  * What lives here is the column shape Drizzle needs to type queries. If you add
  * a column, add it in a migration first and mirror it here second.

@@ -81,8 +81,7 @@ Consequences of that choice, all deliberate:
 - Testing the constraint needs a real Postgres, which is why integration tests
   run against Testcontainers rather than an in-memory fake.
 - The constraint is invisible to Drizzle's schema builder, so migrations are
-  hand-written SQL and `drizzle-kit generate` is not used. See
-  `.claude/skills/db-migration/SKILL.md`.
+  hand-written SQL and `drizzle-kit generate` is not used. See `apps/api/drizzle/`.
 - Range boundary conventions must be exact. All intervals are half-open
   `[start, end)` so that a segment ending at 09:00 and one starting at 09:00 do
   not overlap.
