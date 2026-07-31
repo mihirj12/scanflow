@@ -191,11 +191,12 @@ export function buildBusyMask(
 }
 
 /**
- * Working-hours open slots for one resource on one date, after applying the
- * weekly roster and any date-specific exceptions.
+ * Working-hours open slots for one resource on one date.
  *
- * Exceptions that `available: false` remove slots; those that `available: true`
- * add slots outside the weekly roster (a rare overtime opening).
+ * When the resource has `available: true` exceptions on this date, those
+ * windows **replace** the weekly roster entirely — each interval is independent
+ * (e.g. 08:00–08:45 and 09:00–09:15 with a gap between). Otherwise the weekly
+ * roster applies, adjusted by any exceptions.
  */
 export function openSlotsForResource(
   clinic: ClinicDayGrid,
@@ -208,26 +209,39 @@ export function openSlotsForResource(
   }[],
 ): Set<number> {
   const { start, totalSlots } = clinicDayWindow(clinic, date);
-  // Luxon: Mon=1..Sun=7. Schema / Postgres extract(dow) / JS getDay: Sun=0..Sat=6.
-  // `weekday % 7` maps Sunday 7 → 0 and leaves Mon–Sat alone.
   const dow = start.weekday % 7;
 
+  const dayWindows = exceptions.filter((exception) => exception.available);
+  const closures = exceptions.filter((exception) => !exception.available);
+
   const open = new Set<number>();
-  for (const window of weekly) {
-    if (window.weekday !== dow) continue;
-    paintSlots(clinic, date, window.startsAt, window.endsAt, (slot) => {
-      open.add(slot);
-    });
+
+  if (dayWindows.length > 0) {
+    for (const window of dayWindows) {
+      paintSlots(clinic, date, window.startsAt, window.endsAt, (slot) => {
+        open.add(slot);
+      });
+    }
+    for (const closure of closures) {
+      paintSlots(clinic, date, closure.startsAt, closure.endsAt, (slot) => {
+        open.delete(slot);
+      });
+    }
+  } else {
+    for (const window of weekly) {
+      if (window.weekday !== dow) continue;
+      paintSlots(clinic, date, window.startsAt, window.endsAt, (slot) => {
+        open.add(slot);
+      });
+    }
+    for (const exception of exceptions) {
+      paintSlots(clinic, date, exception.startsAt, exception.endsAt, (slot) => {
+        if (exception.available) open.add(slot);
+        else open.delete(slot);
+      });
+    }
   }
 
-  for (const exception of exceptions) {
-    paintSlots(clinic, date, exception.startsAt, exception.endsAt, (slot) => {
-      if (exception.available) open.add(slot);
-      else open.delete(slot);
-    });
-  }
-
-  // Defence: never claim a slot beyond the day.
   for (const slot of [...open]) {
     if (slot < 0 || slot >= totalSlots) open.delete(slot);
   }
@@ -259,6 +273,58 @@ function paintSlots(
     Math.ceil(clippedEnd.diff(start, 'minutes').minutes / clinic.slotMinutes),
   );
   for (let slot = first; slot < last; slot++) paint(slot);
+}
+
+/**
+ * Converts a clinic-local wall-clock time on a calendar date to a UTC instant.
+ *
+ * @param wallClock - `HH:mm` or `HH:mm:ss` in the clinic timezone.
+ */
+export function wallClockToInstant(
+  clinic: ClinicDayGrid,
+  date: string,
+  wallClock: string,
+): Date {
+  return localOnDate(clinic, date, wallClock).toJSDate();
+}
+
+/**
+ * Latest engine `endSlot` allowed when a patient is available until `wallClock`.
+ * Clinic closing time maps to `totalSlots` because `dayEnd` is not a slot start.
+ */
+export function wallClockToLatestEndSlot(
+  clinic: ClinicDayGrid,
+  date: string,
+  wallClock: string,
+): number {
+  const { end, totalSlots } = clinicDayWindow(clinic, date);
+  const at = localOnDate(clinic, date, wallClock);
+  if (at >= end) {
+    return totalSlots;
+  }
+  return instantToSlot(clinic, date, at.toJSDate());
+}
+
+/**
+ * Marks slots outside `[earliestSlot, latestEndSlot)` as patient-busy.
+ *
+ * Folded into the engine's patient mask so suggestions are searched inside the
+ * window. A post-filter on the top five morning candidates would miss feasible
+ * afternoon starts entirely.
+ */
+export function maskOutsidePatientWindow(
+  totalSlots: number,
+  earliestSlot: number,
+  latestEndSlot: number,
+): bigint {
+  let mask = 0n;
+  for (let slot = 0; slot < earliestSlot; slot++) {
+    mask |= 1n << BigInt(slot);
+  }
+  for (let slot = latestEndSlot; slot < totalSlots; slot++) {
+    mask |= 1n << BigInt(slot);
+  }
+  return mask;
 }
 
 function localOnDate(

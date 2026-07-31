@@ -5,6 +5,7 @@ import type { StatusActionPath } from '../api/client';
 
 export type KebabActionId =
   | 'check-in'
+  | 'undo-check-in'
   | 'start'
   | 'complete'
   | 'reschedule'
@@ -31,6 +32,13 @@ export function kebabActionsFor(
 
   if (next.has('CHECKED_IN')) {
     actions.push({ id: 'check-in', label: 'Check in', toStatus: 'CHECKED_IN' });
+  }
+  if (next.has('SCHEDULED') && status === 'CHECKED_IN') {
+    actions.push({
+      id: 'undo-check-in',
+      label: 'Undo check-in',
+      toStatus: 'SCHEDULED',
+    });
   }
   if (next.has('IN_PROGRESS')) {
     actions.push({
@@ -92,6 +100,8 @@ export function statusActionPath(
   switch (to) {
     case 'CHECKED_IN':
       return 'check-in';
+    case 'SCHEDULED':
+      return 'undo-check-in';
     case 'IN_PROGRESS':
       return 'start';
     case 'COMPLETED':
@@ -101,7 +111,6 @@ export function statusActionPath(
     case 'NO_SHOW':
       return 'no-show';
     case 'DRAFT':
-    case 'SCHEDULED':
       // Reached by booking and rescheduling, not by a status endpoint.
       return null;
     default: {
@@ -115,6 +124,8 @@ function statusToAction(to: AppointmentStatus): KebabAction | null {
   switch (to) {
     case 'CHECKED_IN':
       return { id: 'check-in', label: 'Check in', toStatus: to };
+    case 'SCHEDULED':
+      return { id: 'undo-check-in', label: 'Undo check-in', toStatus: to };
     case 'IN_PROGRESS':
       return { id: 'start', label: 'Start visit', toStatus: to };
     case 'COMPLETED':
@@ -123,8 +134,6 @@ function statusToAction(to: AppointmentStatus): KebabAction | null {
       return { id: 'cancel', label: 'Cancel', toStatus: to };
     case 'NO_SHOW':
       return { id: 'no-show', label: 'Mark no-show', toStatus: to };
-    case 'SCHEDULED':
-      return null;
     case 'DRAFT':
       return null;
     default: {

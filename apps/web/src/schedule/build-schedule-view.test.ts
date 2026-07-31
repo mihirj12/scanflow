@@ -34,10 +34,25 @@ const baseSchedule: GetScheduleResponse = {
     },
   ],
   lanes: [],
+  resourceAvailability: [
+    {
+      resourceId: '11111111-1111-4111-8111-111111111101',
+      openSlots: Array.from({ length: 36 }, (_, index) => index),
+    },
+    {
+      resourceId: '11111111-1111-4111-8111-111111111102',
+      openSlots: Array.from({ length: 36 }, (_, index) => index),
+    },
+    {
+      resourceId: '11111111-1111-4111-8111-111111111103',
+      openSlots: Array.from({ length: 36 }, (_, index) => index),
+    },
+  ],
   appointments: [
     {
       id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
       patientId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
+      patientName: 'Jane Doe',
       status: 'SCHEDULED',
       templateId: null,
       templateNameAtBooking: 'Uptake study',
@@ -55,6 +70,7 @@ const baseSchedule: GetScheduleResponse = {
           resourceStart: '2026-08-03T02:30:00.000Z',
           resourceEnd: '2026-08-03T03:15:00.000Z',
           status: 'ACTIVE',
+          serviceTypeName: 'Consult',
         },
         {
           id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2',
@@ -68,6 +84,7 @@ const baseSchedule: GetScheduleResponse = {
           resourceStart: null,
           resourceEnd: null,
           status: 'ACTIVE',
+          serviceTypeName: null,
         },
       ],
     },
@@ -92,6 +109,8 @@ describe('buildScheduleView', () => {
     const service = view.segments.find((s) => s.kind === 'SERVICE');
     const delay = view.segments.find((s) => s.kind === 'DELAY');
     expect(service?.laneKey).toBe('11111111-1111-4111-8111-111111111101');
+    expect(service?.label).toBe('Jane Doe');
+    expect(service?.sublabel).toBe('Consult');
     expect(delay?.laneKey).toBe('patient');
     expect(delay?.label).toMatch(/Wait/);
   });
@@ -102,6 +121,13 @@ describe('buildScheduleView', () => {
       view.segments,
       'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
     );
-    expect(ids.size).toBe(2);
+    expect(ids.size).toBe(3);
+  });
+
+  it('shows a full visit span on the patient lane', () => {
+    const view = buildScheduleView(baseSchedule);
+    const visit = view.segments.find((s) => s.kind === 'VISIT');
+    expect(visit?.laneKey).toBe('patient');
+    expect(visit?.label).toBe('Jane Doe');
   });
 });

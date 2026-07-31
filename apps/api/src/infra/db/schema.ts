@@ -314,6 +314,7 @@ export const appUser = pgTable(
     passwordHash: text('password_hash').notNull(),
     displayName: text('display_name').notNull(),
     role: userRoleEnum('role').notNull(),
+    resourceId: uuid('resource_id').references(() => resource.id),
     active: boolean('active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()

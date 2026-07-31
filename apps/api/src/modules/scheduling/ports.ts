@@ -24,6 +24,18 @@ export interface ResourceRepository {
     resourceIds: readonly string[],
     onDate: string,
   ): Promise<readonly ExceptionRecord[]>;
+  /** Replaces all weekly rows for one resource weekday. */
+  replaceWorkingHoursForWeekday(
+    resourceId: string,
+    weekday: number,
+    windows: readonly { startsAt: string; endsAt: string }[],
+  ): Promise<void>;
+  /** Replaces date-specific open windows (`resource_exception.available = true`). */
+  replaceDayAvailabilityWindows(
+    resourceId: string,
+    onDate: string,
+    windows: readonly { startsAt: string; endsAt: string }[],
+  ): Promise<void>;
 }
 
 export interface ServiceTypeRepository {

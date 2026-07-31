@@ -3,6 +3,7 @@ import type {
   CurrentUser,
   PatientDto,
 } from '@scanflow/contracts';
+import { canBookAppointments } from '@scanflow/contracts';
 import {
   QueryClient,
   QueryClientProvider,
@@ -20,7 +21,10 @@ import { useSession } from './auth/useSession';
 import { BookingWizard } from './booking/BookingWizard';
 import type { GhostSegment } from './booking/ghost-preview';
 import { AppointmentDrawer } from './management/AppointmentDrawer';
+import { AuditLogPanel } from './management/AuditLogPanel';
+import { AvailabilityPanel } from './management/AvailabilityPanel';
 import { CommandPalette } from './management/CommandPalette';
+import { PatientAppointmentsPanel } from './management/PatientAppointmentsPanel';
 import { printAppointmentSummary } from './management/print-summary';
 import { ReschedulePanel } from './management/ReschedulePanel';
 import {
@@ -93,6 +97,9 @@ function AppShell({
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardSession, setWizardSession] = useState(0);
   const [paletteSession, setPaletteSession] = useState<number | null>(null);
+  const [patientPanel, setPatientPanel] = useState<PatientDto | null>(null);
+  const [availabilityOpen, setAvailabilityOpen] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
   const [ghostSegments, setGhostSegments] = useState<GhostSegment[]>([]);
   const [drawerAppointmentId, setDrawerAppointmentId] = useState<string | null>(
     null,
@@ -111,7 +118,12 @@ function AppShell({
   }, []);
 
   const onGhostChange = useCallback((ghosts: GhostSegment[]) => {
-    setGhostSegments(ghosts);
+    setGhostSegments((previous) => {
+      if (previous.length === 0 && ghosts.length === 0) {
+        return previous;
+      }
+      return ghosts;
+    });
   }, []);
 
   const openWizard = useCallback(() => {
@@ -156,7 +168,14 @@ function AppShell({
           return;
         }
       }
-      if (wizardOpen || paletteSession !== null) return;
+      if (
+        wizardOpen ||
+        paletteSession !== null ||
+        patientPanel !== null ||
+        availabilityOpen ||
+        auditOpen
+      )
+        return;
       event.preventDefault();
       openWizard();
     }
@@ -164,7 +183,15 @@ function AppShell({
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [wizardOpen, paletteSession, openWizard, openPalette]);
+  }, [
+    wizardOpen,
+    paletteSession,
+    patientPanel,
+    availabilityOpen,
+    auditOpen,
+    openWizard,
+    openPalette,
+  ]);
 
   const kebabSegment =
     kebabSegmentId === null || view === undefined
@@ -223,7 +250,12 @@ function AppShell({
   }
 
   const sidePanelOpen =
-    wizardOpen || reschedule !== null || drawerAppointmentId !== null;
+    wizardOpen ||
+    reschedule !== null ||
+    drawerAppointmentId !== null ||
+    patientPanel !== null;
+
+  const mayBook = canBookAppointments(user.role);
 
   return (
     <div className="app">
@@ -242,9 +274,35 @@ function AppShell({
         <button type="button" className="btn btn--ghost" onClick={openPalette}>
           Search
         </button>
-        <button type="button" className="btn btn--primary" onClick={openWizard}>
-          Book
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={() => {
+            setAvailabilityOpen(true);
+          }}
+        >
+          Availability
         </button>
+        {user.role === 'ADMIN' ? (
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => {
+              setAuditOpen(true);
+            }}
+          >
+            Activity log
+          </button>
+        ) : null}
+        {mayBook ? (
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={openWizard}
+          >
+            Book
+          </button>
+        ) : null}
         <p className="app__live" aria-live="polite">
           {formatUpdatedAgo(dataUpdatedAt, nowMs)}
         </p>
@@ -294,6 +352,7 @@ function AppShell({
                 segments={view.segments}
                 timeLabels={view.timeLabels}
                 totalSlots={view.totalSlots}
+                slotAvailability={view.slotAvailability}
                 ghostSegments={ghostSegments}
                 onSegmentActivate={(appointmentId) => {
                   setReschedule(null);
@@ -378,7 +437,42 @@ function AppShell({
             setReschedule(null);
             setDrawerAppointmentId(appointmentId);
           }}
-          onSelectPatient={openWizard}
+          onSelectPatient={(patient) => {
+            setPatientPanel(patient);
+          }}
+        />
+      ) : null}
+
+      {patientPanel !== null ? (
+        <PatientAppointmentsPanel
+          patient={patientPanel}
+          onClose={() => {
+            setPatientPanel(null);
+          }}
+          onSelectAppointment={(appointmentId) => {
+            setPatientPanel(null);
+            setReschedule(null);
+            setDrawerAppointmentId(appointmentId);
+          }}
+        />
+      ) : null}
+
+      {availabilityOpen ? (
+        <AvailabilityPanel
+          user={user}
+          date={date}
+          onClose={() => {
+            setAvailabilityOpen(false);
+          }}
+        />
+      ) : null}
+
+      {auditOpen ? (
+        <AuditLogPanel
+          timeZone={timeZone}
+          onClose={() => {
+            setAuditOpen(false);
+          }}
         />
       ) : null}
     </div>

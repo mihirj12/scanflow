@@ -1,179 +1,177 @@
 # ScanFlow
 
-Appointment scheduling for a radiology clinic, built around the thing that makes
-radiology scheduling hard: **an appointment is not a booking, it is an ordered
-chain of segments with clinical constraints between them.**
+Production-grade appointment scheduling for a radiology clinic. The hard part is
+not finding a free slot — it is placing an **ordered chain of segments** with
+clinical timing constraints, same-resource rules, and capacity-1 resources, while
+making double-booking impossible under concurrency.
 
-A tracer uptake study looks like this:
+**Example chain (tracer uptake):**
 
 ```
 Consult 45m → Inject 30m → [wait 60–90m] → Scan 30m → Scan 30m → Consult 30m
-  doctor        NMT room      no room        scanner    scanner     same doctor
+  physician      NMT room      no room         scanner      scanner    same physician
 ```
 
-The wait is a radiotracer uptake period. It is a clinical requirement, not slack,
-and a scheduler that compresses it to save time produces clinically invalid
-appointments. Meanwhile the patient occupies that wait — they are sitting in the
-clinic — so nothing else can be booked into it. Today the clinic runs this on a
-colour-coded spreadsheet where a single patient's visit appears as five unrelated
-blocks scattered down a column, and there is no way to tell they belong together.
+The engine proposes ranked placements; a human always chooses. Nothing auto-books.
 
-ScanFlow models the chain as the primitive, proposes ranked placements that
-respect every mandatory delay while minimising the wasted time around them, and
-makes double-booking impossible at the database level rather than unlikely at the
-application level.
+---
 
-## Status
+## Executive summary
 
-Phases **M0** through **M5** are complete. **M6 — Auth, RBAC, SSE, seed polish** is on branch `feat/m6-hardening`.
+|                 |                                                                                                                                                                              |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Problem**     | Multi-step nuclear-medicine visits are scheduled today as disconnected blocks; waits are clinical requirements, not slack; patients occupy time even when no room is in use. |
+| **Approach**    | Pure scheduling engine + Postgres exclusion constraints + REST API + React scheduler UI. One Zod contract package shared by API and web.                                     |
+| **Status**      | Phases M0–M6 complete: engine, API, schedule grid, booking wizard, management UI, auth/RBAC/audit/SSE.                                                                       |
+| **Demo clinic** | Asia/Kolkata, 15-minute slots, 08:00–17:00. Seeded synthetic data only — no real PHI.                                                                                        |
 
-| Phase  | Deliverable                                              | State       |
-| ------ | -------------------------------------------------------- | ----------- |
-| M0     | Monorepo, tooling, CI, Compose, schema, migrations, ADRs | Complete    |
-| M1     | Scheduling engine + property tests                       | Complete    |
-| M2     | Express API, repositories, integration tests             | Complete    |
-| M3     | Read-only schedule grid                                  | Complete    |
-| M4     | Suggestions, booking wizard, conflict recovery           | Complete    |
-| M5     | Management UI: drawer, kebab menu, command palette       | Complete    |
-| **M6** | **Auth, RBAC, audit, SSE, seed polish**                  | In progress |
+---
 
 ## Quickstart
 
-Requires Node 22+, pnpm 11, and Docker.
+**Requires:** Node 22+, pnpm 11, Docker (Postgres + Redis).
 
 ```bash
 pnpm install
 cp .env.example .env
-docker compose up -d      # Postgres 16 (btree_gist) and Redis
-pnpm db:migrate           # idempotent — a second run is a no-op
-pnpm db:verify            # asserts the exclusion constraints actually hold
+docker compose up -d
+pnpm db:migrate
+pnpm db:seed
+pnpm dev
 ```
 
-Then `pnpm db:seed`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`,
-`pnpm bench`. `pnpm --filter @scanflow/api dev` serves the API; `pnpm dev` starts
-the web shell (schedule grid arrives in M3).
+| Service               | URL                                    |
+| --------------------- | -------------------------------------- |
+| Web UI                | http://localhost:5173                  |
+| API                   | http://localhost:3000                  |
+| **API docs (Scalar)** | **http://localhost:3000/api/docs**     |
+| OpenAPI JSON          | http://localhost:3000/api/openapi.json |
 
-Nothing in `packages/scheduling-core` needs Docker — it is pure, so `pnpm test`
-and `pnpm bench` run against no services at all. API integration tests need
-Docker (`pnpm test:integration`); they run in CI when Docker Desktop is absent
-locally.
+**Demo logins** (password `ScanFlow!Demo1` unless overridden in `.env`):
 
-## Architecture in ten lines
+| Email                      | Role                                            |
+| -------------------------- | ----------------------------------------------- |
+| `reception@scanflow.local` | RECEPTIONIST — book, manage schedule            |
+| `admin@scanflow.local`     | ADMIN — templates, audit log, metrics           |
+| Clinician accounts         | CLINICIAN — view schedule, set own availability |
 
-```
-apps/web            React 19 + Vite. Schedule grid, booking wizard.
-apps/api            Express 5. http/ → modules/ → infra/, wired in container.ts.
-packages/scheduling-core   Pure engine. Zero dependencies, zero async, zero I/O.
-packages/contracts  Zod schemas + inferred types, imported by both apps.
-packages/config     Shared tsconfig, ESLint, Prettier.
-PostgreSQL 16       Intervals as tstzrange; overlap prevented by EXCLUDE constraints.
-Redis               SSE fan-out across API instances (M6).
-```
+**Quality gates:**
 
-Dependencies point inward. Use cases never import `express` or `drizzle`;
-repositories are interfaces declared beside the use case that needs them, with
-Drizzle adapters in `infra/`. Those boundaries are enforced by ESLint
-(`import-x/no-restricted-paths`) rather than by convention, and
-`packages/scheduling-core` has a purity check that fails the build on any
-dependency, any `async`, or any call to `Math.random` or `Date.now`.
-
-Full detail, including C4 diagrams and the concurrency model, in
-[docs/architecture.md](docs/architecture.md).
-
-## The scheduling problem, precisely
-
-Given a chain of steps, each with a resource type, a duration, and a mandatory
-delay window `[minGap, maxGap]` before it; a set of capacity-1 resources with
-per-day availability; and the patient's own availability — find the placements
-that minimise the total span of the visit.
-
-- A day is 36 fifteen-minute slots. Occupancy is a `bigint` bitmask, one bit per
-  slot, so a conflict check is a single `&`.
-- Search is depth-first over the chain with branch-and-bound on the span.
-- Because `Σ durations + Σ minGaps` is fixed for a given chain, minimising span is
-  exactly minimising _incidental_ gap — the slack caused by a busy resource, as
-  opposed to the clinically mandated wait.
-- Same-resource constraints (`step 5 must use the same physician as step 1`) are
-  resolved during the search, with a per-search overlay mask so the engine cannot
-  overlap a resource with itself.
-- The engine returns up to five ranked candidates and never books. A human always
-  chooses.
-
-Nine invariants are asserted as `fast-check` properties at 1,000 runs each:
-no resource overlap, no patient overlap, gaps within bounds, everything inside the
-day, same-resource honoured, durations preserved, determinism, sorted output, and
-monotonicity. A tenth test measures the generator itself and fails if it drifts
-into producing mostly unschedulable days, because a property suite that asserts
-things about empty arrays proves nothing.
-
-**Benchmark: p95 of 5.35 ms against a 50 ms budget** — 9× headroom. `pnpm bench`
-measures 300 pseudo-random days per case from a fixed seed, so a regression is a
-regression and not a bad roll. These are the numbers from a GitHub-hosted runner
-rather than from a fast laptop, because a performance claim should be one anybody
-can reproduce:
-
-| Case            | Shape                                                                         | p95     | max     |
-| --------------- | ----------------------------------------------------------------------------- | ------- | ------- |
-| Spec worst case | 6 steps, 4 resources per type, wide gap windows, 50% occupancy                | 2.42 ms | 4.95 ms |
-| Deep dead ends  | as above, but the last step needs a modality only one 95%-booked resource has | 5.35 ms | 8.22 ms |
-
-The second case exists because the first turned out to be the easier one: with a
-pool of four resources the engine usually finds a zero-slack layout immediately and
-the bound prunes everything else. Making the _final_ step scarce forces the search
-to explore to full depth and fail, with no good candidate to tighten the bound
-against — which is the shape that would expose a wrong bound.
-
-CI runs this on every push and fails the build if p95 reaches the budget, so the
-figure above cannot quietly go stale.
-
-## Why double-booking is impossible
-
-Overlap prevention is a database constraint, not application code:
-
-```sql
-CONSTRAINT no_resource_double_book EXCLUDE USING gist (
-  resource_id WITH =, resource_during WITH &&
-) WHERE (status <> 'CANCELLED' AND resource_id IS NOT NULL)
+```bash
+pnpm lint && pnpm typecheck && pnpm test
+pnpm db:verify          # proves exclusion constraints exist
+pnpm test:integration   # needs Docker
+pnpm bench              # engine p95 vs 50 ms budget
 ```
 
-There is an identical constraint on `patient_id`, because the patient is modelled
-as a capacity-1 resource — so "patient double-booked" and "scanner double-booked"
-are the same rule, enforced by the same mechanism. This holds under any level of
-concurrency, and also against a seed script, a data migration, or an engineer
-typing `INSERT` into psql. The booking path expects SQLSTATE `23P01` and turns it
-into a 409 carrying fresh alternatives, so the receptionist re-enters nothing.
+`packages/scheduling-core` is pure — unit tests and benchmarks need no Docker.
 
-`pnpm db:verify` proves it, and runs on every push.
+---
+
+## API documentation
+
+OpenAPI **3.1** is generated from the same Zod schemas in `packages/contracts` that
+validate live requests (see [ADR 0002](docs/adr/0002-zod-contracts-over-generated-openapi.md)).
+
+- **Interactive reference:** `/api/docs` (Scalar)
+- **Machine-readable spec:** `/api/openapi.json`
+- **Base path:** `/api/v1`
+
+### Authentication
+
+1. `POST /api/v1/auth/login` with `{ "email", "password" }` → access token in body.
+2. Send `Authorization: Bearer <accessToken>` on protected routes.
+3. Refresh token travels as httpOnly cookie `scanflow_refresh`; rotate with
+   `POST /api/v1/auth/refresh`.
+
+### Core flows
+
+| Intent                          | Method    | Path                            |
+| ------------------------------- | --------- | ------------------------------- |
+| Day schedule grid               | GET       | `/schedule?date=YYYY-MM-DD`     |
+| Live grid updates               | GET (SSE) | `/schedule/stream`              |
+| Rank candidates                 | POST      | `/appointments/suggestions`     |
+| Book chosen slot                | POST      | `/appointments`                 |
+| Reschedule                      | POST      | `/appointments/{id}/reschedule` |
+| Lifecycle (check-in, cancel, …) | POST      | `/appointments/{id}/{action}`   |
+
+**Roles:** RECEPTIONIST and ADMIN can book; CLINICIAN is read-only for booking.
+ADMIN-only: `/audit`, `/metrics`, `POST /appointment-templates`.
+
+**Errors:** RFC 9457 `application/problem+json`. HTTP 409 on slot conflict may
+include `freshCandidates` so the receptionist can pick an alternative without
+restarting the wizard.
+
+**Idempotency:** Optional `Idempotency-Key` header on `POST /appointments` and
+reschedule — same key + same body replays the original response.
+
+Full request/response shapes are in the interactive docs.
+
+---
+
+## Architecture
+
+```
+apps/web                 React 19 + Vite — schedule grid, booking wizard, management
+apps/api                 Express 5 — http/ → modules/ → infra/, wired in container.ts
+packages/scheduling-core Pure engine (no I/O, no async, zero dependencies)
+packages/contracts       Zod schemas + inferred types (API + web)
+PostgreSQL 16            tstzrange intervals; EXCLUDE constraints prevent overlap
+Redis                    SSE fan-out across API instances
+```
+
+Dependencies point inward. Use cases never import Express or Drizzle; repository
+**ports** sit beside use cases, **adapters** live in `apps/api/src/infra/repositories`.
+All wiring is in `apps/api/src/container.ts` — no DI framework.
+
+Deep dive: [docs/architecture.md](docs/architecture.md).
+
+### Correctness guarantees
+
+- **Engine:** nine property invariants (resource/patient overlap, gap bounds, same-resource, determinism, …) tested with `fast-check` at 1,000 runs each. Benchmark CI fails if p95 exceeds 50 ms.
+- **Database:** `EXCLUDE USING gist` on resource and patient intervals — overlap is rejected with SQLSTATE `23P01`, mapped to HTTP 409. `pnpm db:verify` asserts constraints on every push.
+- **Booked chains are snapshots:** steps copied to `appointment_step` at booking; template edits do not alter past appointments.
+
+### Security and PHI
+
+- JWT access tokens (short TTL) + httpOnly refresh cookies.
+- Patient identifiers never appear in logs, error messages, or audit payloads.
+- Cancelled appointments excluded from search; admin activity log via `GET /audit`.
+
+---
+
+## Repository layout
+
+| Path                       | Purpose                                                       |
+| -------------------------- | ------------------------------------------------------------- |
+| `packages/scheduling-core` | Placement search, ranking, chain validation                   |
+| `packages/contracts`       | Shared Zod API contracts                                      |
+| `apps/api`                 | HTTP surface, use cases, Drizzle adapters, OpenAPI generation |
+| `apps/web`                 | Scheduler UI                                                  |
+| `docs/adr/`                | Architecture decision records                                 |
+| `docs/OPEN-QUESTIONS.md`   | Ambiguities and judgement calls                               |
+
+---
 
 ## Decision records
 
-- [ADR 0001 — Postgres exclusion constraints](docs/adr/0001-postgres-exclusion-constraints.md) — why interval integrity belongs in the database, and the price (Postgres is not swappable)
-- [ADR 0002 — Zod contracts over generated OpenAPI](docs/adr/0002-zod-contracts-over-generated-openapi.md) — one source of truth for runtime validation and static types
-- [ADR 0003 — Patient as a resource](docs/adr/0003-patient-as-resource.md) — unifying two conflict rules into one
-- [ADR 0004 — Express with explicit layering](docs/adr/0004-express-with-explicit-layering.md) — why not NestJS
+- [ADR 0001 — Postgres exclusion constraints](docs/adr/0001-postgres-exclusion-constraints.md)
+- [ADR 0002 — Zod contracts (OpenAPI derived at runtime)](docs/adr/0002-zod-contracts-over-generated-openapi.md)
+- [ADR 0003 — Patient as a resource](docs/adr/0003-patient-as-resource.md)
+- [ADR 0004 — Express with explicit layering](docs/adr/0004-express-with-explicit-layering.md)
 
-Every judgement call made where the specification was ambiguous is recorded in
-[docs/OPEN-QUESTIONS.md](docs/OPEN-QUESTIONS.md), including three questions still
-open for the clinic.
+---
 
 ## Deliberately out of scope
 
-- **Setup and teardown buffers** are modelled in the schema and the engine but
-  seeded as zero, with no UI. The abstraction exists because a mandatory delay is
-  its mirror case; the feature does not.
-- **One clinic is seeded**, though `clinic_id` is on every tenant-scoped table
-  from the first migration. There is no tenant onboarding, and no row-level
-  security.
-- **No billing, no PACS, no HL7/FHIR, no SMS reminders.** Scheduling only.
-- **No recurring appointments** and no waitlist.
-- **One timezone per clinic.** Cross-timezone clinics are not modelled.
-- **Postgres is not swappable.** See ADR 0001 — this is a considered trade, not an
-  oversight.
+- Multi-clinic tenancy (schema is tenant-ready; one clinic seeded)
+- Billing, PACS, HL7/FHIR, SMS reminders
+- Recurring appointments, waitlists, auto-booking
+- Postgres portability (see ADR 0001)
 
-## A note on data
+---
 
-All seed and test data is synthetic: generated names, fake MRNs, invented dates of
-birth. **No real patient data is in this repository or ever will be.** In
-production this system holds PHI, which is why patient identifiers are banned from
-log output, error messages, and audit payloads, and why that ban is a review
-checklist item rather than a good intention.
+## Agent / contributor orientation
+
+See [AGENTS.md](AGENTS.md) for layering rules, commands, and skills. Conventional
+Commits with scopes: `api`, `web`, `core`, `contracts`, `db`, etc.

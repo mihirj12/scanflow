@@ -337,6 +337,47 @@ describe('suggestPlacements', () => {
     });
   });
 
+  describe('unbounded post-injection wait', () => {
+    it('allows a gap above min when maxGapSlots is zero (no upper cap)', () => {
+      const scanBusy = occupy(0n, 2, 4);
+      const candidates = suggestPlacements(
+        request({
+          steps: [
+            {
+              seq: 1,
+              resourceType: 'DOCTOR',
+              durationSlots: 2,
+              setupSlots: 0,
+              teardownSlots: 0,
+              minGapSlots: 0,
+              maxGapSlots: 0,
+            },
+            {
+              seq: 2,
+              resourceType: 'SCAN_ROOM',
+              durationSlots: 2,
+              setupSlots: 0,
+              teardownSlots: 0,
+              minGapSlots: 2,
+              maxGapSlots: 0,
+            },
+          ],
+          resources: [
+            resource('doctor-1', 'DOCTOR'),
+            resource('scan-1', 'SCAN_ROOM', scanBusy),
+          ],
+        }),
+      );
+
+      expect(candidates.length).toBeGreaterThan(0);
+      const first = candidates[0]!;
+      const scan = serviceFor(first, 2);
+      expect(
+        scan.patientStartSlot - serviceFor(first, 1).patientEndSlot,
+      ).toBeGreaterThanOrEqual(2);
+    });
+  });
+
   describe('honest empty results rather than exceptions', () => {
     it('returns nothing for a chain that cannot fit before 17:00', () => {
       // The chain needs 15 slots; the day is one slot too short for it.

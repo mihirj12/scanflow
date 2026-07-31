@@ -13,6 +13,7 @@ export interface AuthUser {
   role: UserRole;
   passwordHash: string;
   active: boolean;
+  resourceId: string | null;
 }
 
 export interface UserRepository {
@@ -65,6 +66,7 @@ export interface AccessTokenClaims {
   clinicId: string;
   email: string;
   role: UserRole;
+  resourceId: string | null;
 }
 
 export interface AccessTokenIssuer {

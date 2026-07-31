@@ -1,18 +1,24 @@
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 
 const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
- * Focus trap for the appointment drawer. Focus moves to the first focusable
- * child on mount, Tab and Shift+Tab cycle inside the container, Escape calls
- * `onEscape`, and focus returns to the opener on unmount.
+ * Focus trap for modal panels. Tab cycles inside the container, Escape closes.
+ * `onEscape` is read from a ref so a parent re-render (e.g. a live clock) does
+ * not re-run this effect and steal focus from an input mid-typing.
  */
 export function useFocusTrap(
   containerRef: RefObject<HTMLElement | null>,
   active: boolean,
   onEscape: () => void,
 ): void {
+  const onEscapeRef = useRef(onEscape);
+
+  useEffect(() => {
+    onEscapeRef.current = onEscape;
+  }, [onEscape]);
+
   useEffect(() => {
     if (!active) return;
     const root = containerRef.current;
@@ -29,7 +35,7 @@ export function useFocusTrap(
     function onKeyDown(event: KeyboardEvent): void {
       if (event.key === 'Escape') {
         event.preventDefault();
-        onEscape();
+        onEscapeRef.current();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -55,5 +61,5 @@ export function useFocusTrap(
         previouslyFocused.focus();
       }
     };
-  }, [active, containerRef, onEscape]);
+  }, [active, containerRef]);
 }

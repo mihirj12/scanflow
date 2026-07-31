@@ -4,7 +4,11 @@ import type { GhostSegment } from '../booking/ghost-preview';
 import { SegmentKebab } from '../management/SegmentKebab';
 import type { KebabAction } from '../management/status-actions';
 
-import type { GridLane, GridSegment } from './build-schedule-view';
+import type {
+  GridLane,
+  GridSegment,
+  SlotAvailability,
+} from './build-schedule-view';
 import { useScheduleInteraction } from './use-schedule-interaction';
 
 export interface ScheduleGridProps {
@@ -12,6 +16,7 @@ export interface ScheduleGridProps {
   segments: readonly GridSegment[];
   timeLabels: readonly string[];
   totalSlots: number;
+  slotAvailability?: ReadonlyMap<string, readonly SlotAvailability[]>;
   /** Translucent overlay for a hovered suggestion — never interactive. */
   ghostSegments?: readonly GhostSegment[];
   onSegmentActivate?: (appointmentId: string) => void;
@@ -27,6 +32,7 @@ export function ScheduleGrid({
   segments,
   timeLabels,
   totalSlots,
+  slotAvailability = new Map(),
   ghostSegments = [],
   onSegmentActivate,
   kebabOpenSegmentId = null,
@@ -74,17 +80,31 @@ export function ScheduleGrid({
       ))}
 
       {lanes.map((lane, laneIndex) =>
-        Array.from({ length: totalSlots }, (_, slot) => (
-          <div
-            key={`${lane.key}-${String(slot)}`}
-            className="schedule-grid__cell"
-            style={{
-              gridColumn: laneIndex + 2,
-              gridRow: slot + 2,
-            }}
-            aria-hidden="true"
-          />
-        )),
+        Array.from({ length: totalSlots }, (_, slot) => {
+          const availability =
+            lane.resourceId === undefined
+              ? 'open'
+              : (slotAvailability.get(lane.resourceId)?.[slot] ?? 'closed');
+          return (
+            <div
+              key={`${lane.key}-${String(slot)}`}
+              className={[
+                'schedule-grid__cell',
+                availability === 'open'
+                  ? `schedule-grid__cell--open schedule-grid__cell--${resourceClass(lane.resourceType)}`
+                  : '',
+                availability === 'closed' ? 'schedule-grid__cell--closed' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              style={{
+                gridColumn: laneIndex + 2,
+                gridRow: slot + 2,
+              }}
+              aria-hidden="true"
+            />
+          );
+        }),
       )}
 
       {segments.map((segment) => {
@@ -92,18 +112,23 @@ export function ScheduleGrid({
         if (laneIndex < 0) return null;
         const highlighted = interaction.highlightedIds.has(segment.id);
         const resourceType =
-          lanes[laneIndex]?.resourceType ??
-          (segment.kind === 'DELAY' ? undefined : undefined);
+          segment.kind === 'SERVICE'
+            ? lanes[laneIndex]?.resourceType
+            : undefined;
         const kebabOpen = kebabOpenSegmentId === segment.id;
+        const showKebab =
+          segment.kind === 'SERVICE' && onKebabToggle !== undefined;
 
         return (
           <div
             key={segment.id}
             className={[
               'schedule-segment',
-              segment.kind === 'DELAY'
-                ? 'schedule-segment--delay'
-                : `schedule-segment--${resourceClass(resourceType ?? lanes[laneIndex]?.resourceType)}`,
+              segment.kind === 'VISIT'
+                ? 'schedule-segment--visit'
+                : segment.kind === 'DELAY'
+                  ? 'schedule-segment--delay'
+                  : `schedule-segment--${resourceClass(resourceType ?? lanes[laneIndex]?.resourceType)}`,
               highlighted ? 'schedule-segment--lit' : '',
               isHeld(segment.status) ? 'schedule-segment--held' : '',
             ]
@@ -138,8 +163,13 @@ export function ScheduleGrid({
               }}
             >
               <span className="schedule-segment__label">{segment.label}</span>
+              {segment.sublabel !== null ? (
+                <span className="schedule-segment__sublabel">
+                  {segment.sublabel}
+                </span>
+              ) : null}
             </button>
-            {onKebabToggle !== undefined ? (
+            {onKebabToggle !== undefined && showKebab ? (
               <button
                 type="button"
                 className="schedule-segment__kebab-btn"

@@ -319,7 +319,9 @@ describe('suggestPlacements invariants', () => {
               // The lower bound is the clinical one. Compressing it produces an
               // appointment that is invalid however convenient it looks.
               expect(gap).toBeGreaterThanOrEqual(step.minGapSlots);
-              expect(gap).toBeLessThanOrEqual(step.maxGapSlots);
+              if (!(step.maxGapSlots === 0 && step.minGapSlots > 0)) {
+                expect(gap).toBeLessThanOrEqual(step.maxGapSlots);
+              }
             }
             previousEnd = placement.patientEndSlot;
           }

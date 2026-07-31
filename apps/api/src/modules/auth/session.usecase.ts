@@ -41,6 +41,7 @@ function toCurrentUser(user: AuthUser): CurrentUser {
     email: user.email,
     displayName: user.displayName,
     role: user.role,
+    resourceId: user.resourceId,
   };
 }
 
@@ -68,6 +69,7 @@ async function issue(
     clinicId: user.clinicId,
     email: user.email,
     role: user.role,
+    resourceId: user.resourceId,
   });
   return {
     accessToken,

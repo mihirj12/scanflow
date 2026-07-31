@@ -3,6 +3,7 @@ import type {
   ChainValidationContext,
   ServiceTypeDto,
 } from '@scanflow/contracts';
+import { isGapMaxUnbounded } from '@scanflow/contracts';
 import { useQuery } from '@tanstack/react-query';
 import { type ReactElement } from 'react';
 
@@ -10,6 +11,8 @@ import { fetchTemplate, fetchTemplateSummaries } from '../api/client';
 
 import {
   blankStep,
+  defaultGapAfterInject,
+  isInjectStep,
   normalizeChainSteps,
   reorderChainSteps,
   sameResourceOptions,
@@ -177,11 +180,21 @@ export function ChainBuilder({
               <select
                 value={step.serviceTypeId}
                 onChange={(event) => {
-                  const next = steps.map((s, i) =>
+                  let next = steps.map((s, i) =>
                     i === index
                       ? { ...s, serviceTypeId: event.target.value }
                       : s,
                   );
+                  const changed = next[index];
+                  if (
+                    changed !== undefined &&
+                    isInjectStep(changed, serviceTypes) &&
+                    index < next.length - 1
+                  ) {
+                    next = next.map((s, i) =>
+                      i === index + 1 ? defaultGapAfterInject(s) : s,
+                    );
+                  }
                   emit(next, { markModified: true });
                 }}
               >
@@ -240,47 +253,97 @@ export function ChainBuilder({
               </div>
             </div>
 
-            {index > 0 ? (
-              <div className="field field--row">
-                <span className="field__label">Gap before (min / max)</span>
-                <div className="stepper">
-                  <MinuteStepper
-                    label="Minimum gap"
-                    value={step.minGapMin}
-                    slotMinutes={validationContext.slotMinutes}
-                    onChange={(minGapMin) => {
-                      const next = steps.map((s, i) =>
-                        i === index
-                          ? {
-                              ...s,
-                              minGapMin,
-                              maxGapMin: Math.max(s.maxGapMin, minGapMin),
-                            }
-                          : s,
-                      );
-                      emit(next, { markModified: true });
-                    }}
-                  />
-                  <MinuteStepper
-                    label="Maximum gap"
-                    value={step.maxGapMin}
-                    slotMinutes={validationContext.slotMinutes}
-                    onChange={(maxGapMin) => {
-                      const next = steps.map((s, i) =>
-                        i === index
-                          ? {
-                              ...s,
-                              maxGapMin,
-                              minGapMin: Math.min(s.minGapMin, maxGapMin),
-                            }
-                          : s,
-                      );
-                      emit(next, { markModified: true });
-                    }}
-                  />
-                </div>
-              </div>
-            ) : null}
+            {isInjectStep(step, serviceTypes) && index < steps.length - 1
+              ? (() => {
+                  const following = steps[index + 1];
+                  if (following === undefined) return null;
+                  const maxLimited =
+                    !isGapMaxUnbounded(following) && following.minGapMin > 0;
+                  return (
+                    <div className="field field--row">
+                      <span className="field__label">
+                        Gap after injection (minimum
+                        {maxLimited ? ' / maximum' : ''})
+                      </span>
+                      <div className="stepper stepper--gap">
+                        <MinuteStepper
+                          label="Minimum wait after injection"
+                          value={following.minGapMin}
+                          slotMinutes={validationContext.slotMinutes}
+                          onChange={(minGapMin) => {
+                            const next = steps.map((s, i) => {
+                              if (i !== index + 1) return s;
+                              const maxUnbounded = isGapMaxUnbounded(s);
+                              return {
+                                ...s,
+                                minGapMin,
+                                maxGapMin: maxUnbounded
+                                  ? 0
+                                  : minGapMin === 0
+                                    ? 0
+                                    : Math.max(s.maxGapMin, minGapMin),
+                              };
+                            });
+                            emit(next, { markModified: true });
+                          }}
+                        />
+                        <label className="patient-window__toggle patient-window__toggle--compact">
+                          <input
+                            type="checkbox"
+                            checked={maxLimited}
+                            disabled={following.minGapMin === 0}
+                            onChange={(event) => {
+                              const next = steps.map((s, i) => {
+                                if (i !== index + 1) return s;
+                                if (event.target.checked) {
+                                  return {
+                                    ...s,
+                                    maxGapMin: Math.max(
+                                      s.minGapMin,
+                                      s.maxGapMin > 0
+                                        ? s.maxGapMin
+                                        : s.minGapMin,
+                                    ),
+                                  };
+                                }
+                                return { ...s, maxGapMin: 0 };
+                              });
+                              emit(next, { markModified: true });
+                            }}
+                          />
+                          <span>Limit maximum wait</span>
+                        </label>
+                        {maxLimited ? (
+                          <MinuteStepper
+                            label="Maximum wait after injection"
+                            value={following.maxGapMin}
+                            slotMinutes={validationContext.slotMinutes}
+                            onChange={(maxGapMin) => {
+                              const next = steps.map((s, i) =>
+                                i === index + 1
+                                  ? {
+                                      ...s,
+                                      maxGapMin,
+                                      minGapMin: Math.min(
+                                        s.minGapMin,
+                                        maxGapMin,
+                                      ),
+                                    }
+                                  : s,
+                              );
+                              emit(next, { markModified: true });
+                            }}
+                          />
+                        ) : following.minGapMin > 0 ? (
+                          <span className="stepper__value stepper__value--muted">
+                            No maximum
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })()
+              : null}
 
             {(() => {
               const options = sameResourceOptions(steps, index, serviceTypes);
@@ -340,9 +403,18 @@ export function ChainBuilder({
         onClick={() => {
           const first = serviceTypes[0];
           if (first === undefined) return;
-          emit([...steps, blankStep(first.id, steps.length + 1)], {
-            markModified: true,
-          });
+          const last = steps[steps.length - 1];
+          emit(
+            [
+              ...steps,
+              blankStep(first.id, steps.length + 1, {
+                ...(last === undefined
+                  ? {}
+                  : { afterStep: last, serviceTypes }),
+              }),
+            ],
+            { markModified: true },
+          );
         }}
       >
         Add step

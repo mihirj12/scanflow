@@ -82,6 +82,48 @@ export function createResourceRepository(db: Db): ResourceRepository {
         }),
       );
     },
+
+    async replaceWorkingHoursForWeekday(resourceId, weekday, windows) {
+      await db
+        .delete(resourceWorkingHours)
+        .where(
+          and(
+            eq(resourceWorkingHours.resourceId, resourceId),
+            eq(resourceWorkingHours.weekday, weekday),
+          ),
+        );
+      if (windows.length === 0) return;
+      await db.insert(resourceWorkingHours).values(
+        windows.map((window) => ({
+          resourceId,
+          weekday,
+          startsAt: window.startsAt,
+          endsAt: window.endsAt,
+        })),
+      );
+    },
+
+    async replaceDayAvailabilityWindows(resourceId, onDate, windows) {
+      await db
+        .delete(resourceException)
+        .where(
+          and(
+            eq(resourceException.resourceId, resourceId),
+            eq(resourceException.onDate, onDate),
+            eq(resourceException.available, true),
+          ),
+        );
+      if (windows.length === 0) return;
+      await db.insert(resourceException).values(
+        windows.map((window) => ({
+          resourceId,
+          onDate,
+          startsAt: window.startsAt,
+          endsAt: window.endsAt,
+          available: true,
+        })),
+      );
+    },
   };
 }
 

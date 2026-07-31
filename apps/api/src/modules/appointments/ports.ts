@@ -14,6 +14,10 @@ import type {
 
 export interface PatientRepository {
   getById(clinicId: string, patientId: string): Promise<PatientRecord | null>;
+  getByIds(
+    clinicId: string,
+    patientIds: readonly string[],
+  ): Promise<ReadonlyMap<string, PatientRecord>>;
   search(
     clinicId: string,
     q: string | undefined,
@@ -61,6 +65,7 @@ export interface AppointmentRepository {
     clinicId: string;
     date?: string;
     status?: AppointmentStatus;
+    patientId?: string;
     q?: string;
     limit: number;
     cursor?: string;

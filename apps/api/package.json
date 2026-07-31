@@ -9,7 +9,7 @@
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "dev": "tsx watch src/main.ts",
+    "dev": "tsx watch --env-file=../../.env src/main.ts",
     "start": "node dist/src/main.js",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:verify": "tsx scripts/verify-schema.ts",
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
+    "@scalar/express-api-reference": "^0.10.11",
     "@scanflow/contracts": "workspace:*",
     "@scanflow/scheduling-core": "workspace:*",
     "cookie-parser": "^1.4.7",

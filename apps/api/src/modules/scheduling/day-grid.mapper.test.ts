@@ -6,8 +6,11 @@ import {
   clinicDayMinutes,
   clinicDayWindow,
   instantToSlot,
+  maskOutsidePatientWindow,
   openSlotsForResource,
   slotToInstant,
+  wallClockToInstant,
+  wallClockToLatestEndSlot,
   type ClinicDayGrid,
 } from './day-grid.mapper.js';
 
@@ -121,6 +124,49 @@ describe('day-grid.mapper', () => {
     expect(open.has(19)).toBe(false); // 12:45
     expect(open.has(20)).toBe(true); // 13:00
     expect(open.size).toBe(32); // 36 - 4 closed slots
+  });
+
+  it('uses date-specific windows exclusively when present', () => {
+    const open = openSlotsForResource(
+      clinic,
+      DATE,
+      [{ weekday: 1, startsAt: '08:00', endsAt: '17:00' }],
+      [
+        { startsAt: '08:00', endsAt: '08:45', available: true },
+        { startsAt: '09:00', endsAt: '09:15', available: true },
+        { startsAt: '09:30', endsAt: '10:15', available: true },
+        { startsAt: '12:00', endsAt: '13:15', available: true },
+      ],
+    );
+    expect(open.has(0)).toBe(true); // 08:00
+    expect(open.has(2)).toBe(true); // 08:30
+    expect(open.has(3)).toBe(false); // 08:45 gap
+    expect(open.has(4)).toBe(true); // 09:00
+    expect(open.has(5)).toBe(false); // 09:15 gap start
+    expect(open.has(6)).toBe(true); // 09:30
+    expect(open.has(12)).toBe(false); // 11:00 closed
+    expect(open.has(16)).toBe(true); // 12:00
+    expect(open.size).toBe(12);
+  });
+
+  it('maps wall clock to the correct slot', () => {
+    const eight = wallClockToInstant(clinic, DATE, '08:00');
+    expect(instantToSlot(clinic, DATE, eight)).toBe(0);
+    const noon = wallClockToInstant(clinic, DATE, '12:00');
+    expect(instantToSlot(clinic, DATE, noon)).toBe(16);
+  });
+
+  it('maps clinic closing time to totalSlots for patient window end', () => {
+    expect(wallClockToLatestEndSlot(clinic, DATE, '17:00')).toBe(36);
+    expect(wallClockToLatestEndSlot(clinic, DATE, '16:00')).toBe(32);
+  });
+
+  it('masks slots outside a patient availability window', () => {
+    // 12:00–17:00 = slots [16, 36).
+    const mask = maskOutsidePatientWindow(36, 16, 36);
+    expect((mask & (1n << 15n)) === 0n).toBe(false); // 11:45 blocked
+    expect((mask & (1n << 16n)) === 0n).toBe(true); // 12:00 open
+    expect((mask & (1n << 35n)) === 0n).toBe(true); // 16:45 open
   });
 
   it('handles a DST spring-forward day without inventing slots', () => {

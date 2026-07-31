@@ -51,6 +51,10 @@ import {
 } from './modules/auth/session.usecase.js';
 import { createGetDayUtilisationUseCase } from './modules/scheduling/day-utilisation.usecase.js';
 import { createGetDayScheduleUseCase } from './modules/scheduling/get-day-schedule.usecase.js';
+import {
+  createSetResourceDayAvailabilityUseCase,
+  createGetResourceAvailabilityUseCase,
+} from './modules/scheduling/set-resource-availability.usecase.js';
 import { createSuggestPlacementsUseCase } from './modules/scheduling/suggest-placements.usecase.js';
 
 /**
@@ -150,9 +154,20 @@ export async function createContainer(
   const getDaySchedule = createGetDayScheduleUseCase({
     clinics,
     resources,
-    segments,
     scheduleVersions,
     appointments,
+    patients,
+    serviceTypes,
+  });
+
+  const setResourceDayAvailability = createSetResourceDayAvailabilityUseCase({
+    clinics,
+    resources,
+  });
+
+  const getResourceAvailability = createGetResourceAvailabilityUseCase({
+    clinics,
+    resources,
   });
 
   const getDayUtilisation = createGetDayUtilisationUseCase({
@@ -189,6 +204,8 @@ export async function createContainer(
       changeStatus,
       rescheduleAppointment,
       getDaySchedule,
+      setResourceDayAvailability,
+      getResourceAvailability,
       getDayUtilisation,
       listAudit: createListAuditUseCase({ audit: auditReads }),
       login: createLoginUseCase(sessionDeps),

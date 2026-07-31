@@ -1,5 +1,6 @@
 import type { GetScheduleResponse } from '@scanflow/contracts';
 import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
 import { fetchSchedule } from '../api/client';
 
@@ -25,8 +26,11 @@ export function useSchedule(date: string): {
     refetchInterval: 60_000,
   });
 
-  const view =
-    query.data === undefined ? undefined : buildScheduleView(query.data);
+  const view = useMemo(
+    () =>
+      query.data === undefined ? undefined : buildScheduleView(query.data),
+    [query.data],
+  );
 
   return {
     view,

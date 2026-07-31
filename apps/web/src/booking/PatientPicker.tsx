@@ -22,6 +22,7 @@ export function PatientPicker({
   const patients = useQuery({
     queryKey: ['patients', query],
     queryFn: () => searchPatients(query),
+    enabled: !showCreate,
   });
 
   return (

@@ -89,7 +89,10 @@ export function validatePlacementRequest(request: PlacementRequest): void {
       problems.push(
         `${at}: maxGapSlots must be a non-negative integer, got ${String(step.maxGapSlots)}`,
       );
-    } else if (step.maxGapSlots < step.minGapSlots) {
+    } else if (
+      step.maxGapSlots < step.minGapSlots &&
+      !(step.maxGapSlots === 0 && step.minGapSlots > 0)
+    ) {
       problems.push(
         `${at}: maxGapSlots (${String(step.maxGapSlots)}) must be at least minGapSlots (${String(step.minGapSlots)})`,
       );

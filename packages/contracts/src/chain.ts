@@ -23,6 +23,16 @@ export const chainStepSchema = z.object({
 
 export type ChainStep = z.infer<typeof chainStepSchema>;
 
+/**
+ * True when only a minimum wait applies — `maxGapMin` of 0 means no upper cap,
+ * not "zero-minute maximum". Both zero means no gap constraint at all.
+ */
+export function isGapMaxUnbounded(
+  step: Pick<ChainStep, 'minGapMin' | 'maxGapMin'>,
+): boolean {
+  return step.minGapMin > 0 && step.maxGapMin === 0;
+}
+
 /** A service type looked up so the chain rules can reason about resource type. */
 export interface ChainServiceType {
   id: string;
@@ -124,7 +134,7 @@ export function parseAppointmentChain(
         message: `${at}: minGapMin (${String(step.minGapMin)}) must be a multiple of ${String(context.slotMinutes)} minutes.`,
       });
     }
-    if (step.maxGapMin % context.slotMinutes !== 0) {
+    if (step.maxGapMin % context.slotMinutes !== 0 && step.maxGapMin !== 0) {
       issues.push({
         code: 'custom',
         path: [index, 'maxGapMin'],
@@ -146,7 +156,7 @@ export function parseAppointmentChain(
       });
     }
 
-    if (step.maxGapMin < step.minGapMin) {
+    if (!isGapMaxUnbounded(step) && step.maxGapMin < step.minGapMin) {
       issues.push({
         code: 'custom',
         path: [index, 'maxGapMin'],

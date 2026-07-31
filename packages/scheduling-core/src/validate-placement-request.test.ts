@@ -65,7 +65,7 @@ describe('validatePlacementRequest', () => {
     }).toThrow(/durationSlots/);
   });
 
-  it('rejects maxGapSlots below minGapSlots', () => {
+  it('rejects maxGapSlots below minGapSlots when a max is set', () => {
     expect(() => {
       validatePlacementRequest(
         request({
@@ -73,6 +73,16 @@ describe('validatePlacementRequest', () => {
         }),
       );
     }).toThrow(/maxGapSlots/);
+  });
+
+  it('accepts minGapSlots with no max (maxGapSlots 0)', () => {
+    expect(() => {
+      validatePlacementRequest(
+        request({
+          steps: [step(), step({ seq: 2, minGapSlots: 4, maxGapSlots: 0 })],
+        }),
+      );
+    }).not.toThrow();
   });
 
   it('rejects a negative gap', () => {

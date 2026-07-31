@@ -24,6 +24,7 @@ export function createGetCurrentUserUseCase(deps: { users: UserRepository }) {
       email: user.email,
       displayName: user.displayName,
       role: user.role,
+      resourceId: user.resourceId,
     };
   };
 }

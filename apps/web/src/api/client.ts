@@ -7,12 +7,15 @@ import type {
   CreatePatientBody,
   CurrentUser,
   GetScheduleResponse,
+  GetResourceAvailabilityResponse,
+  ListAuditResponse,
   ListAppointmentsResponse,
   LoginBody,
   PatientDto,
   ProblemDetails,
   RescheduleAppointmentBody,
   ResourceDto,
+  SetResourceDayAvailabilityBody,
   ServiceTypeDto,
   SessionResponse,
   SuggestAppointmentsBody,
@@ -102,6 +105,14 @@ export async function apiPost<T>(
   return request<T>(path, {
     method: 'POST',
     headers,
+    body: JSON.stringify(body),
+  });
+}
+
+export async function apiPut<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
 }
@@ -253,9 +264,13 @@ export function fetchAppointment(id: string): Promise<AppointmentDetail> {
   return apiGet<AppointmentDetail>(`/api/v1/appointments/${id}`);
 }
 
+export type StatusActionPath =
+  'cancel' | 'check-in' | 'undo-check-in' | 'no-show' | 'start' | 'complete';
+
 export function listAppointments(params: {
   q?: string;
   date?: string;
+  patientId?: string;
   limit?: number;
 }): Promise<ListAppointmentsResponse> {
   const search = new URLSearchParams();
@@ -263,18 +278,37 @@ export function listAppointments(params: {
     search.set('q', params.q.trim());
   }
   if (params.date !== undefined) search.set('date', params.date);
+  if (params.patientId !== undefined) search.set('patientId', params.patientId);
   search.set('limit', String(params.limit ?? 20));
   return apiGet<ListAppointmentsResponse>(
     `/api/v1/appointments?${search.toString()}`,
   );
 }
 
+/** ADMIN-only clinic activity trail. */
+export function fetchAudit(limit = 50): Promise<ListAuditResponse> {
+  return apiGet<ListAuditResponse>(`/api/v1/audit?limit=${String(limit)}`);
+}
+
+export function fetchResourceAvailability(
+  resourceId: string,
+  date: string,
+): Promise<GetResourceAvailabilityResponse> {
+  return apiGet(
+    `/api/v1/resources/${resourceId}/availability?date=${encodeURIComponent(date)}`,
+  );
+}
+
+export function setResourceAvailability(
+  resourceId: string,
+  body: SetResourceDayAvailabilityBody,
+): Promise<GetResourceAvailabilityResponse> {
+  return apiPut(`/api/v1/resources/${resourceId}/availability`, body);
+}
+
 export function fetchPatient(id: string): Promise<PatientDto> {
   return apiGet<PatientDto>(`/api/v1/patients/${id}`);
 }
-
-export type StatusActionPath =
-  'cancel' | 'check-in' | 'no-show' | 'start' | 'complete';
 
 export function postAppointmentStatus(
   appointmentId: string,
