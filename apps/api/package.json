@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
-    "@scalar/express-api-reference": "^0.10.11",
+    "@scalar/express-api-reference": "^0.10.12",
     "@scanflow/contracts": "workspace:*",
     "@scanflow/scheduling-core": "workspace:*",
     "cookie-parser": "^1.4.7",
@@ -26,7 +26,7 @@
     "express": "5.2.1",
     "helmet": "8.3.0",
     "ioredis": "^5.11.1",
-    "jose": "^6.2.4",
+    "jose": "^6.2.5",
     "luxon": "3.7.2",
     "pino": "10.3.1",
     "pino-http": "11.0.0",
